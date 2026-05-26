@@ -12,12 +12,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
-// Manifest
+// Manifest - supporta UUID come parametro query
 app.get('/manifest.json', (req, res) => {
-  res.json(getManifest());
+  const userUuid = req.query.uuid;
+  res.json(getManifest(userUuid));
 });
 
-// Catalogo
+// Catalogo - estrae l'UUID dall'ID del catalogo
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   const { type, catalogId } = req.params;
   if (!['movie', 'series', 'anime'].includes(type)) {
@@ -80,7 +81,8 @@ app.post('/api/save-config', async (req, res) => {
     selectedAnime,
     prefs
   });
-  const manifestUrl = `${process.env.ADDON_BASE_URL}/catalog/movie/${userUuid}.json`;
+  // URL CORRETTO: manifest.json con UUID come parametro
+  const manifestUrl = `${process.env.ADDON_BASE_URL || req.protocol + '://' + req.get('host')}/manifest.json?uuid=${userUuid}`;
   res.json({ success: true, manifestUrl, userUuid });
 });
 
