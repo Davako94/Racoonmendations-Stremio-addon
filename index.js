@@ -46,13 +46,11 @@ app.post('/api/stremio/login', async (req, res) => {
     const continueWatching = stremioApi.getContinueWatchingFromLibrary(library);
     const allSeeds = stremioApi.extractSeedsFromLibrary(library, continueWatching);
     
-    // Per ogni seed, arricchisci con TMDB ID (se non già presente)
+    // Per ogni seed, arricchisci con TMDB ID
     const enrichedSeeds = await Promise.all(allSeeds.map(async seed => {
       if (seed.id && seed.id.startsWith('tt')) {
-        // ID IMDb già presente, lo usiamo
         return { ...seed, tmdb_id: seed.id };
       }
-      // Cerca su TMDB per ottenere l'ID
       const searchResults = await tmdb.searchTmdb(seed.title, seed.type);
       if (searchResults.length > 0) {
         return { ...seed, tmdb_id: searchResults[0].id };
@@ -89,7 +87,7 @@ app.post('/api/save-config', async (req, res) => {
 // API: ricerca TMDB (per frontend)
 app.get('/api/search', async (req, res) => {
   const { q, type } = req.query;
-  if (!q) return res.json([]);
+  if (!q || q.length < 2) return res.json([]);
   let results;
   if (type === 'anime') {
     results = await tmdb.searchAnime(q);
