@@ -4,7 +4,22 @@ const { getUserSeeds } = require('../services/userStore');
 
 const cache = new NodeCache({ stdTTL: 3600 });
 
-async function getCatalog(catalogType, userUuid) {
+async function getCatalog(catalogType, catalogId) {
+  // Estrai l'UUID dall'ID del catalogo (es. "rec-movies-abc-123" -> "abc-123")
+  let userUuid = null;
+  if (catalogId) {
+    const parts = catalogId.split('-');
+    // L'ultima parte è l'UUID se abbiamo almeno 3 parti (rec-movies-UUID)
+    if (parts.length >= 3) {
+      userUuid = parts.slice(2).join('-'); // Prende tutto dopo "rec-movies"
+    }
+  }
+  
+  if (!userUuid) {
+    console.error('No UUID found in catalogId:', catalogId);
+    return [];
+  }
+  
   const cacheKey = `${catalogType}:${userUuid}`;
   let cached = cache.get(cacheKey);
   if (cached) return cached;
