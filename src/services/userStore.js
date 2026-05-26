@@ -5,9 +5,10 @@ async function saveUserConfig(uuid, data) {
   const { error } = await supabase.from('user_configs').upsert({
     uuid,
     stremio_email: data.stremioEmail,
-    selected_movies: data.selectedMovies,   // array di { id, title, tmdb_id }
+    selected_movies: data.selectedMovies,
     selected_series: data.selectedSeries,
     selected_anime: data.selectedAnime,
+    language: data.language || 'en',
     preferences: data.prefs,
     created_at: new Date(),
     updated_at: new Date()
@@ -37,6 +38,11 @@ async function getUserSeeds(uuid, catalogType) {
   return seeds.map(s => ({ ...s, type: catalogType }));
 }
 
+async function getUserLanguage(uuid) {
+  const config = await getUserConfig(uuid);
+  return config?.language || 'en';
+}
+
 async function updateUserSeeds(uuid, catalogType, seeds) {
   const config = await getUserConfig(uuid);
   if (!config) return;
@@ -47,4 +53,4 @@ async function updateUserSeeds(uuid, catalogType, seeds) {
   await supabase.from('user_configs').update(update).eq('uuid', uuid);
 }
 
-module.exports = { saveUserConfig, getUserConfig, getUserSeeds, updateUserSeeds };
+module.exports = { saveUserConfig, getUserConfig, getUserSeeds, getUserLanguage, updateUserSeeds };
