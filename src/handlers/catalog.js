@@ -1,84 +1,111 @@
 const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
-const { getUserSeeds } = require('../services/userStore');
+const { getUserSeeds, getUserLanguage } = require('../services/userStore');
 
 const cache = new NodeCache({ stdTTL: 3600 });
 
 async function getCatalog(catalogType, catalogId) {
-  // Estrai l'UUID dall'ID del catalogo (es. "rec-movies-abc-123" -> "abc-123")
+  // Estrai UUID dall'ID del catalogo
   let userUuid = null;
   if (catalogId) {
     const parts = catalogId.split('-');
-    // L'ultima parte è l'UUID se abbiamo almeno 3 parti (rec-movies-UUID)
-    if (parts.length >= 3) {
-      userUuid = parts.slice(2).join('-'); // Prende tutto dopo "rec-movies"
+    if (parts.length >= 2) {
+      userUuid = parts.slice(1).join('-');
     }
   }
   
-  if (!userUuid) {
-    console.error('No UUID found in catalogId:', catalogId);
-    return [];
-  }
+  if (!userUuid) return [];
   
   const cacheKey = `${catalogType}:${userUuid}`;
   let cached = cache.get(cacheKey);
   if (cached) return cached;
 
   const seeds = await getUserSeeds(userUuid, catalogType);
+  const language = await getUserLanguage(userUuid);
+  
   if (!seeds.length) return [];
 
-  let allRecs = [];
+  const allMetas = [];
+  
+  // 1. Per ogni seed, crea una sezione "Similar to X" (max 10 per seed)
   for (let seed of seeds) {
-    const recommendations = await tmdb.getRecommendations(seed.type, seed.tmdb_id || seed.id);
-    const similar = await tmdb.getSimilar(seed.type, seed.tmdb_id || seed.id);
-    const combined = [...recommendations, ...similar];
-    for (let item of combined) {
-      item._seedTitle = seed.title;
-    }
-    allRecs.push(...combined);
-  }
-
-  // Deduplica per ID
-  const unique = new Map();
-  for (let rec of allRecs) {
-    if (!unique.has(rec.id)) {
-      unique.set(rec.id, { ...rec, _seedTitles: [rec._seedTitle] });
-    } else {
-      const existing = unique.get(rec.id);
-      if (!existing._seedTitles.includes(rec._seedTitle)) {
-        existing._seedTitles.push(rec._seedTitle);
-      }
-    }
-  }
-
-  // Scoring: voto medio
-  let results = Array.from(unique.values());
-  results.sort((a,b) => (b.vote_average || 0) - (a.vote_average || 0));
-  results = results.slice(0, 50);
-
-  // Formato Stremio meta
-  const metas = results.map(item => {
-    let label = '';
-    if (item._seedTitles.length === 1) {
-      label = `Simili a ${item._seedTitles[0]}`;
-    } else {
-      label = `Simili a ${item._seedTitles.slice(0,3).join(', ')}${item._seedTitles.length > 3 ? '...' : ''}`;
-    }
-    return {
-      id: `rec_${item.id}`,
-      type: catalogType === 'movie' ? 'movie' : (catalogType === 'series' ? 'series' : 'anime'),
+    const similar = await tmdb.getSimilar(seed.type, seed.tmdb_id || seed.id, language);
+    const similarMetas = similar.slice(0, 10).map(item => ({
+      id: `sim_${item.id}`,
+      type: catalogType === 'movie' ? 'movie' : 'series',
       name: item.title,
       poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-      description: item.overview || label,
+      posterShape: 'poster',
+      background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
+      description: item.overview || `Similar to ${seed.title}`,
       releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+      videos: [],
+      links: [],
       extra: {
-        recommendationSeed: label
+        recommendationSeed: `🎬 Similar to ${seed.title}`
       }
-    };
-  });
-
-  cache.set(cacheKey, metas);
-  return metas;
+    }));
+    allMetas.push(...similarMetas);
+  }
+  
+  // 2. Sezione "Recommended for you" (misto da tutti i seed)
+  let allRecommendations = [];
+  for (let seed of seeds) {
+    const recs = await tmdb.getRecommendations(seed.type, seed.tmdb_id || seed.id, language);
+    allRecommendations.push(...recs);
+  }
+  
+  // Deduplica
+  const uniqueRecs = new Map();
+  for (let rec of allRecommendations) {
+    if (!uniqueRecs.has(rec.id)) {
+      uniqueRecs.set(rec.id, rec);
+    }
+  }
+  
+  const recommendedMetas = Array.from(uniqueRecs.values()).slice(0, 20).map(item => ({
+    id: `rec_${item.id}`,
+    type: catalogType === 'movie' ? 'movie' : 'series',
+    name: item.title,
+    poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+    posterShape: 'poster',
+    background: item.backdrop_path ? `https://image.tmdb.org/t/p/original${item.backdrop_path}` : null,
+    description: item.overview || `Recommended based on your favorites`,
+    releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+    extra: {
+      recommendationSeed: `✨ Recommended for You`
+    }
+  }));
+  
+  allMetas.push(...recommendedMetas);
+  
+  // 3. Sezione "Random from your watchlist" (casuali)
+  const randomSeeds = [...seeds];
+  for (let i = randomSeeds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [randomSeeds[i], randomSeeds[j]] = [randomSeeds[j], randomSeeds[i]];
+  }
+  
+  const randomMetas = randomSeeds.slice(0, 10).map(seed => ({
+    id: `rand_${seed.tmdb_id || seed.id}`,
+    type: catalogType === 'movie' ? 'movie' : 'series',
+    name: seed.title,
+    poster: seed.poster_path ? `https://image.tmdb.org/t/p/w342${seed.poster_path}` : null,
+    posterShape: 'poster',
+    description: `🍿 From your library: ${seed.title}`,
+    releaseInfo: '',
+    extra: {
+      recommendationSeed: `📌 From your collection`
+    }
+  }));
+  
+  allMetas.push(...randomMetas);
+  
+  // Limite totale a 100 items
+  const finalMetas = allMetas.slice(0, 100);
+  
+  cache.set(cacheKey, finalMetas);
+  return finalMetas;
 }
 
 function invalidateCache(userUuid) {
