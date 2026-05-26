@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>Configura il tuo addon - Stremio Recommendations</title>
+  <style>
+    body { background: #0a0f1a; color: #e0e0e0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 1rem; margin: 0; }
+    .container { max-width: 700px; margin: 0 auto; background: #141a24; border-radius: 28px; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    h1, h2 { color: #ffb347; text-align: center; }
+    label { display: block; margin-top: 1.2rem; font-weight: bold; }
+    input, select, textarea { width: 100%; padding: 0.75rem; margin-top: 0.25rem; background: #1e2a3a; border: 1px solid #2d3e4f; border-radius: 16px; color: white; font-size: 1rem; }
+    button { background: #ffb347; color: #0a0f1a; border: none; padding: 0.8rem 1.5rem; border-radius: 40px; font-weight: bold; font-size: 1rem; margin-top: 1.5rem; width: 100%; cursor: pointer; transition: 0.2s; }
+    button:hover { background: #ffa01e; }
+    .movie-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
+    .movie-chip { background: #1e2a3a; padding: 0.4rem 0.9rem; border-radius: 30px; display: inline-flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+    .remove { background: none; border: none; color: #ff8a7a; cursor: pointer; font-size: 1.2rem; margin-left: 0.3rem; }
+    .result { margin-top: 2rem; background: #0f1219; padding: 1rem; border-radius: 20px; word-break: break-all; }
+    .step { background: #1a212e; border-radius: 20px; padding: 1rem; margin-bottom: 1.5rem; }
+    .loader { display: inline-block; width: 20px; height: 20px; border: 3px solid #fff; border-radius: 50%; border-top-color: #ffb347; animation: spin 1s ease-in-out infinite; margin-left: 10px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    footer { text-align: center; margin-top: 2rem; color: #6c7a89; font-size: 0.8rem; }
+    .warning { background: #332200; padding: 0.8rem; border-radius: 16px; margin: 1rem 0; border-left: 4px solid #ffb347; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🎬 Smart Recommendations</h1>
+  <p>Importa la tua <strong>libreria Stremio</strong> (autenticazione sicura) e seleziona i tuoi titoli preferiti. L'addon genererà raccomandazioni personalizzate.</p>
+
+  <div class="step">
+    <h2>1️⃣ Accedi a Stremio</h2>
+    <input type="email" id="email" placeholder="Email Stremio" autocomplete="off">
+    <input type="password" id="password" placeholder="Password Stremio">
+    <button id="loginBtn">📥 Importa libreria</button>
+    <div id="libraryStatus"></div>
+  </div>
+
+  <div class="step" id="seedsStep" style="display:none;">
+    <h2>2️⃣ Scegli i tuoi seed (min 5 film + 5 serie)</h2>
+    <div class="warning">⚠️ Le raccomandazioni saranno basate su questi titoli. Clicca sui chip per rimuovere.</div>
+    
+    <label>🎥 Film preferiti</label>
+    <div id="selectedMoviesList" class="movie-grid"></div>
+    <input type="text" id="searchMovie" placeholder="Cerca altri film...">
+    <div id="movieResults"></div>
+
+    <label>📺 Serie preferite</label>
+    <div id="selectedSeriesList" class="movie-grid"></div>
+    <input type="text" id="searchSeries" placeholder="Cerca altre serie...">
+    <div id="seriesResults"></div>
+
+    <label>🍥 Anime preferiti</label>
+    <div id="selectedAnimeList" class="movie-grid"></div>
+    <input type="text" id="searchAnime" placeholder="Cerca anime...">
+    <div id="animeResults"></div>
+
+    <label>⭐ Preferenze extra (opzionale)</label>
+    <textarea id="prefs" placeholder="Es. evita horror, solo film post-2000, rating minimo 7"></textarea>
+
+    <button id="generateBtn">✨ Genera il mio addon</button>
+  </div>
+
+  <div id="result" class="result" style="display:none;">
+    <h3>✅ Addon creato!</h3>
+    <p>Copia questo link in Stremio (Impostazioni → Addon):</p>
+    <code id="manifestUrl" style="background:#000;display:block;padding:10px;border-radius:12px;word-break:break-all;"></code>
+    <p style="margin-top:1rem;">Oppure usa l'UUID: <strong id="userUuid"></strong></p>
+    <p>I cataloghi sono disponibili agli endpoint:<br>
+    <code>/catalog/movie/&lt;uuid&gt;.json</code><br>
+    <code>/catalog/series/&lt;uuid&gt;.json</code><br>
+    <code>/catalog/anime/&lt;uuid&gt;.json</code>
+    </p>
+  </div>
+  <footer>Powered by TMDB • I tuoi seed rimangono privati nel database</footer>
+</div>
+
+<script>
+  let libraryItems = [];
+  let selectedMovies = [];
+  let selectedSeries = [];
+  let selectedAnime = [];
+  let currentUserUuid = null;
+
+  const loginBtn = document.getElementById('loginBtn');
+  const email = document.getElementById('email');
+  const password = document.getElementById('password');
+  const libraryStatus = document.getElementById('libraryStatus');
+  const seedsStep = document.getElementById('seedsStep');
+
+  loginBtn.onclick = async () => {
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = 'Importazione in corso <span class="loader"></span>';
+    try {
+      const res = await fetch('/api/stremio/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.value, password: password.value })
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error);
+      libraryItems = data.library;
+      libraryStatus.innerHTML = `<p>✅ Importati ${libraryItems.length} titoli dalla libreria. Ora seleziona i tuoi seed (min 5 film e 5 serie).</p>`;
+      seedsStep.style.display = 'block';
+      // Pre-seleziona automaticamente i primi 5 film e 5 serie dalla libreria
+      const moviesFromLib = libraryItems.filter(i => i.type === 'movie').slice(0, 10);
+      const seriesFromLib = libraryItems.filter(i => i.type === 'series').slice(0, 10);
+      const animeFromLib = libraryItems.filter(i => i.type === 'anime').slice(0, 10); // se presenti
+      selectedMovies = moviesFromLib.map(m => ({ id: m.id, title: m.title, tmdb_id: m.tmdb_id }));
+      selectedSeries = seriesFromLib.map(s => ({ id: s.id, title: s.title, tmdb_id: s.tmdb_id }));
+      selectedAnime = animeFromLib.map(a => ({ id: a.id, title: a.title, tmdb_id: a.tmdb_id }));
+      renderSelections();
+    } catch (err) {
+      libraryStatus.innerHTML = `<p style="color:#ff8a7a;">❌ Errore: ${err.message}</p>`;
+    } finally {
+      loginBtn.disabled = false;
+      loginBtn.innerHTML = '📥 Importa libreria';
+    }
+  };
+
+  function renderSelections() {
+    const moviesDiv = document.getElementById('selectedMoviesList');
+    moviesDiv.innerHTML = selectedMovies.map(m => `<div class="movie-chip">${m.title} <span class="remove" data-id="${m.id}" data-type="movie">✖</span></div>`).join('');
+    document.querySelectorAll('#selectedMoviesList .remove').forEach(btn => {
+      btn.onclick = () => removeSeed(btn.dataset.id, 'movie');
+    });
+    const seriesDiv = document.getElementById('selectedSeriesList');
+    seriesDiv.innerHTML = selectedSeries.map(s => `<div class="movie-chip">${s.title} <span class="remove" data-id="${s.id}" data-type="series">✖</span></div>`).join('');
+    document.querySelectorAll('#selectedSeriesList .remove').forEach(btn => {
+      btn.onclick = () => removeSeed(btn.dataset.id, 'series');
+    });
+    const animeDiv = document.getElementById('selectedAnimeList');
+    animeDiv.innerHTML = selectedAnime.map(a => `<div class="movie-chip">${a.title} <span class="remove" data-id="${a.id}" data-type="anime">✖</span></div>`).join('');
+    document.querySelectorAll('#selectedAnimeList .remove').forEach(btn => {
+      btn.onclick = () => removeSeed(btn.dataset.id, 'anime');
+    });
+  }
+
+  function removeSeed(id, type) {
+    if (type === 'movie') selectedMovies = selectedMovies.filter(m => m.id != id);
+    if (type === 'series') selectedSeries = selectedSeries.filter(s => s.id != id);
+    if (type === 'anime') selectedAnime = selectedAnime.filter(a => a.id != id);
+    renderSelections();
+  }
+
+  async function searchAndAdd(type, query) {
+    if (!query) return;
+    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}`);
+    const results = await res.json();
+    const container = document.getElementById(`${type}Results`);
+    if (results.length) {
+      container.innerHTML = results.slice(0,5).map(r => `<div class="movie-chip" data-id="${r.id}" data-title="${r.title}">${r.title} <button class="addSeed">+</button></div>`).join('');
+      container.querySelectorAll('.addSeed').forEach(btn => {
+        btn.onclick = (e) => {
+          const chip = e.target.closest('.movie-chip');
+          const id = chip.dataset.id;
+          const title = chip.dataset.title;
+          if (type === 'movie') selectedMovies.push({ id, title, tmdb_id: id });
+          if (type === 'series') selectedSeries.push({ id, title, tmdb_id: id });
+          if (type === 'anime') selectedAnime.push({ id, title, tmdb_id: id });
+          renderSelections();
+          container.innerHTML = '';
+          document.getElementById(`search${type.charAt(0).toUpperCase()+type.slice(1)}`).value = '';
+        };
+      });
+    } else {
+      container.innerHTML = '<div>Nessun risultato</div>';
+    }
+  }
+
+  document.getElementById('searchMovie').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchAndAdd('movie', e.target.value);
+  });
+  document.getElementById('searchSeries').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchAndAdd('series', e.target.value);
+  });
+  document.getElementById('searchAnime').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') searchAndAdd('anime', e.target.value);
+  });
+
+  document.getElementById('generateBtn').onclick = async () => {
+    if (selectedMovies.length < 5 || selectedSeries.length < 5) {
+      alert('Devi selezionare almeno 5 film e 5 serie (puoi aggiungerne dalla ricerca)');
+      return;
+    }
+    const prefs = document.getElementById('prefs').value;
+    const res = await fetch('/api/save-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stremioEmail: email.value,
+        selectedMovies,
+        selectedSeries,
+        selectedAnime,
+        prefs,
+        existingUuid: currentUserUuid
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      document.getElementById('manifestUrl').innerText = data.manifestUrl;
+      document.getElementById('userUuid').innerText = data.userUuid;
+      document.getElementById('result').style.display = 'block';
+      currentUserUuid = data.userUuid;
+    } else {
+      alert('Errore durante il salvataggio');
+    }
+  };
+</script>
+</body>
+</html>
