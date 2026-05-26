@@ -12,6 +12,7 @@
     input, select, textarea { width: 100%; padding: 0.75rem; margin-top: 0.25rem; background: #1e2a3a; border: 1px solid #2d3e4f; border-radius: 16px; color: white; font-size: 1rem; }
     button { background: #ffb347; color: #0a0f1a; border: none; padding: 0.8rem 1.5rem; border-radius: 40px; font-weight: bold; font-size: 1rem; margin-top: 1.5rem; width: 100%; cursor: pointer; transition: 0.2s; }
     button:hover { background: #ffa01e; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
     .movie-grid { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.8rem; }
     .movie-chip { background: #1e2a3a; padding: 0.4rem 0.9rem; border-radius: 30px; display: inline-flex; align-items: center; gap: 10px; font-size: 0.9rem; }
     .remove { background: none; border: none; color: #ff8a7a; cursor: pointer; font-size: 1.2rem; margin-left: 0.3rem; }
@@ -21,18 +22,53 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     footer { text-align: center; margin-top: 2rem; color: #6c7a89; font-size: 0.8rem; }
     .warning { background: #332200; padding: 0.8rem; border-radius: 16px; margin: 1rem 0; border-left: 4px solid #ffb347; }
+    .result-card {
+      background: #1e2a3a;
+      border-radius: 12px;
+      padding: 8px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: 0.2s;
+    }
+    .result-card:hover {
+      background: #2d3e4f;
+    }
+    .addSeedBtn {
+      background: #ffb347;
+      border: none;
+      border-radius: 20px;
+      padding: 4px 12px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-left: auto;
+    }
+    .addSeedBtn:hover {
+      background: #ffa01e;
+    }
+    hr {
+      border-color: #2d3e4f;
+      margin: 1rem 0;
+    }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>🎬 Smart Recommendations</h1>
-  <p>Importa la tua <strong>libreria Stremio</strong> (autenticazione sicura) e seleziona i tuoi titoli preferiti. L'addon genererà raccomandazioni personalizzate.</p>
+  <p>Importa la tua <strong>libreria Stremio</strong> (autenticazione sicura) oppure usa la <strong>selezione manuale</strong>. L'addon genererà raccomandazioni personalizzate.</p>
 
   <div class="step">
-    <h2>1️⃣ Accedi a Stremio</h2>
+    <h2>1️⃣ Accedi a Stremio (opzionale)</h2>
     <input type="email" id="email" placeholder="Email Stremio" autocomplete="off">
     <input type="password" id="password" placeholder="Password Stremio">
     <button id="loginBtn">📥 Importa libreria</button>
+    
+    <hr>
+    <div style="text-align: center;">
+      <button id="manualModeBtn" style="background: #2d3e4f; color: #ffb347;">✏️ Passa alla selezione manuale</button>
+    </div>
+    
     <div id="libraryStatus"></div>
   </div>
 
@@ -40,17 +76,17 @@
     <h2>2️⃣ Scegli i tuoi seed (min 5 film + 5 serie)</h2>
     <div class="warning">⚠️ Le raccomandazioni saranno basate su questi titoli. Clicca sui chip per rimuovere.</div>
     
-    <label>🎥 Film preferiti</label>
+    <label>🎥 Film preferiti (<span id="movieCount">0</span>/5 minimo)</label>
     <div id="selectedMoviesList" class="movie-grid"></div>
-    <input type="text" id="searchMovie" placeholder="Cerca altri film...">
+    <input type="text" id="searchMovie" placeholder="Cerca film (min 2 caratteri)...">
     <div id="movieResults"></div>
 
-    <label>📺 Serie preferite</label>
+    <label>📺 Serie preferite (<span id="seriesCount">0</span>/5 minimo)</label>
     <div id="selectedSeriesList" class="movie-grid"></div>
-    <input type="text" id="searchSeries" placeholder="Cerca altre serie...">
+    <input type="text" id="searchSeries" placeholder="Cerca serie (min 2 caratteri)...">
     <div id="seriesResults"></div>
 
-    <label>🍥 Anime preferiti</label>
+    <label>🍥 Anime preferiti (opzionale)</label>
     <div id="selectedAnimeList" class="movie-grid"></div>
     <input type="text" id="searchAnime" placeholder="Cerca anime...">
     <div id="animeResults"></div>
@@ -58,7 +94,7 @@
     <label>⭐ Preferenze extra (opzionale)</label>
     <textarea id="prefs" placeholder="Es. evita horror, solo film post-2000, rating minimo 7"></textarea>
 
-    <button id="generateBtn">✨ Genera il mio addon</button>
+    <button id="generateBtn" disabled style="background: #555;">✨ Genera il mio addon (serve minimo 5 film e 5 serie)</button>
   </div>
 
   <div id="result" class="result" style="display:none;">
@@ -81,14 +117,113 @@
   let selectedSeries = [];
   let selectedAnime = [];
   let currentUserUuid = null;
+  let isManualMode = false;
 
   const loginBtn = document.getElementById('loginBtn');
+  const manualModeBtn = document.getElementById('manualModeBtn');
   const email = document.getElementById('email');
   const password = document.getElementById('password');
   const libraryStatus = document.getElementById('libraryStatus');
   const seedsStep = document.getElementById('seedsStep');
+  const generateBtn = document.getElementById('generateBtn');
 
+  // Funzione per aggiornare i contatori e abilitare il bottone
+  function updateCounters() {
+    const movieCount = selectedMovies.length;
+    const seriesCount = selectedSeries.length;
+    document.getElementById('movieCount').innerText = movieCount;
+    document.getElementById('seriesCount').innerText = seriesCount;
+    
+    if (movieCount >= 5 && seriesCount >= 5) {
+      generateBtn.disabled = false;
+      generateBtn.style.background = '#ffb347';
+      generateBtn.style.color = '#0a0f1a';
+    } else {
+      generateBtn.disabled = true;
+      generateBtn.style.background = '#555';
+    }
+  }
+
+  // Funzione per rimuovere un seed
+  window.removeSeed = function(id, type) {
+    if (type === 'movie') selectedMovies = selectedMovies.filter(m => m.id != id);
+    if (type === 'series') selectedSeries = selectedSeries.filter(s => s.id != id);
+    if (type === 'anime') selectedAnime = selectedAnime.filter(a => a.id != id);
+    renderSelections();
+    updateCounters();
+  };
+
+  // Render dei chip selezionati
+  function renderSelections() {
+    const moviesDiv = document.getElementById('selectedMoviesList');
+    moviesDiv.innerHTML = selectedMovies.map(m => `<div class="movie-chip">${m.title} <span class="remove" onclick="removeSeed('${m.id}', 'movie')">✖</span></div>`).join('');
+    
+    const seriesDiv = document.getElementById('selectedSeriesList');
+    seriesDiv.innerHTML = selectedSeries.map(s => `<div class="movie-chip">${s.title} <span class="remove" onclick="removeSeed('${s.id}', 'series')">✖</span></div>`).join('');
+    
+    const animeDiv = document.getElementById('selectedAnimeList');
+    animeDiv.innerHTML = selectedAnime.map(a => `<div class="movie-chip">${a.title} <span class="remove" onclick="removeSeed('${a.id}', 'anime')">✖</span></div>`).join('');
+    
+    updateCounters();
+  }
+
+  // Funzione di ricerca con suggerimenti in tempo reale
+  async function searchAndAdd(type, query) {
+    if (!query || query.length < 2) {
+      document.getElementById(`${type}Results`).innerHTML = '';
+      return;
+    }
+    
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}`);
+      const results = await res.json();
+      const container = document.getElementById(`${type}Results`);
+      
+      if (results && results.length) {
+        container.innerHTML = results.slice(0,5).map(r => {
+          const posterUrl = r.poster_path ? `https://image.tmdb.org/t/p/w92${r.poster_path}` : '';
+          return `
+            <div class="result-card" data-id="${r.id}" data-title="${r.title.replace(/'/g, "\\'")}" data-poster="${r.poster_path || ''}">
+              ${posterUrl ? `<img src="${posterUrl}" style="width: 40px; height: 60px; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'">` : '<div style="width:40px;height:60px;background:#2d3e4f;border-radius:8px;"></div>'}
+              <div style="flex:1; margin-left: 10px;">
+                <strong>${r.title}</strong><br>
+                <small>${r.release_date ? r.release_date.split('-')[0] : ''}</small>
+              </div>
+              <button class="addSeedBtn" data-id="${r.id}" data-title="${r.title.replace(/'/g, "\\'")}" data-type="${type}">+</button>
+            </div>
+          `;
+        }).join('');
+        
+        // Aggiungi event listener ai bottoni +
+        container.querySelectorAll('.addSeedBtn').forEach(btn => {
+          btn.onclick = () => {
+            const id = btn.dataset.id;
+            const title = btn.dataset.title;
+            const seedType = btn.dataset.type;
+            const seedToAdd = { id, title, tmdb_id: id };
+            
+            if (seedType === 'movie') selectedMovies.push(seedToAdd);
+            else if (seedType === 'series') selectedSeries.push(seedToAdd);
+            else if (seedType === 'anime') selectedAnime.push(seedToAdd);
+            
+            renderSelections();
+            container.innerHTML = '';
+            document.getElementById(`search${seedType.charAt(0).toUpperCase()+seedType.slice(1)}`).value = '';
+          };
+        });
+      } else {
+        container.innerHTML = '<div style="padding: 10px; color: gray;">Nessun risultato trovato</div>';
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+      document.getElementById(`${type}Results`).innerHTML = '<div style="padding: 10px; color: red;">Errore di ricerca</div>';
+    }
+  }
+
+  // Login Stremio
   loginBtn.onclick = async () => {
+    if (isManualMode) return;
+    
     loginBtn.disabled = true;
     loginBtn.innerHTML = 'Importazione in corso <span class="loader"></span>';
     try {
@@ -99,111 +234,89 @@
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
+      
       libraryItems = data.library;
       libraryStatus.innerHTML = `<p>✅ Importati ${libraryItems.length} titoli dalla libreria. Ora seleziona i tuoi seed (min 5 film e 5 serie).</p>`;
       seedsStep.style.display = 'block';
-      // Pre-seleziona automaticamente i primi 5 film e 5 serie dalla libreria
+      
+      // Pre-seleziona automaticamente i primi 5 film e 5 serie
       const moviesFromLib = libraryItems.filter(i => i.type === 'movie').slice(0, 10);
       const seriesFromLib = libraryItems.filter(i => i.type === 'series').slice(0, 10);
-      const animeFromLib = libraryItems.filter(i => i.type === 'anime').slice(0, 10); // se presenti
       selectedMovies = moviesFromLib.map(m => ({ id: m.id, title: m.title, tmdb_id: m.tmdb_id }));
       selectedSeries = seriesFromLib.map(s => ({ id: s.id, title: s.title, tmdb_id: s.tmdb_id }));
-      selectedAnime = animeFromLib.map(a => ({ id: a.id, title: a.title, tmdb_id: a.tmdb_id }));
       renderSelections();
     } catch (err) {
-      libraryStatus.innerHTML = `<p style="color:#ff8a7a;">❌ Errore: ${err.message}</p>`;
+      libraryStatus.innerHTML = `<p style="color:#ff8a7a;">❌ Errore: ${err.message}. Usa la selezione manuale.</p>`;
     } finally {
       loginBtn.disabled = false;
       loginBtn.innerHTML = '📥 Importa libreria';
     }
   };
 
-  function renderSelections() {
-    const moviesDiv = document.getElementById('selectedMoviesList');
-    moviesDiv.innerHTML = selectedMovies.map(m => `<div class="movie-chip">${m.title} <span class="remove" data-id="${m.id}" data-type="movie">✖</span></div>`).join('');
-    document.querySelectorAll('#selectedMoviesList .remove').forEach(btn => {
-      btn.onclick = () => removeSeed(btn.dataset.id, 'movie');
-    });
-    const seriesDiv = document.getElementById('selectedSeriesList');
-    seriesDiv.innerHTML = selectedSeries.map(s => `<div class="movie-chip">${s.title} <span class="remove" data-id="${s.id}" data-type="series">✖</span></div>`).join('');
-    document.querySelectorAll('#selectedSeriesList .remove').forEach(btn => {
-      btn.onclick = () => removeSeed(btn.dataset.id, 'series');
-    });
-    const animeDiv = document.getElementById('selectedAnimeList');
-    animeDiv.innerHTML = selectedAnime.map(a => `<div class="movie-chip">${a.title} <span class="remove" data-id="${a.id}" data-type="anime">✖</span></div>`).join('');
-    document.querySelectorAll('#selectedAnimeList .remove').forEach(btn => {
-      btn.onclick = () => removeSeed(btn.dataset.id, 'anime');
-    });
-  }
+  // Modalità manuale
+  manualModeBtn.onclick = () => {
+    isManualMode = true;
+    email.disabled = true;
+    password.disabled = true;
+    loginBtn.disabled = true;
+    loginBtn.style.opacity = '0.5';
+    manualModeBtn.disabled = true;
+    manualModeBtn.style.opacity = '0.5';
+    
+    seedsStep.style.display = 'block';
+    libraryStatus.innerHTML = `<p>🔧 Modalità manuale attivata. Cerca e seleziona i tuoi film, serie e anime preferiti (minimo 5 ciascuno).</p>`;
+    libraryItems = [];
+  };
 
-  function removeSeed(id, type) {
-    if (type === 'movie') selectedMovies = selectedMovies.filter(m => m.id != id);
-    if (type === 'series') selectedSeries = selectedSeries.filter(s => s.id != id);
-    if (type === 'anime') selectedAnime = selectedAnime.filter(a => a.id != id);
-    renderSelections();
-  }
-
-  async function searchAndAdd(type, query) {
-    if (!query) return;
-    const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}`);
-    const results = await res.json();
-    const container = document.getElementById(`${type}Results`);
-    if (results.length) {
-      container.innerHTML = results.slice(0,5).map(r => `<div class="movie-chip" data-id="${r.id}" data-title="${r.title}">${r.title} <button class="addSeed">+</button></div>`).join('');
-      container.querySelectorAll('.addSeed').forEach(btn => {
-        btn.onclick = (e) => {
-          const chip = e.target.closest('.movie-chip');
-          const id = chip.dataset.id;
-          const title = chip.dataset.title;
-          if (type === 'movie') selectedMovies.push({ id, title, tmdb_id: id });
-          if (type === 'series') selectedSeries.push({ id, title, tmdb_id: id });
-          if (type === 'anime') selectedAnime.push({ id, title, tmdb_id: id });
-          renderSelections();
-          container.innerHTML = '';
-          document.getElementById(`search${type.charAt(0).toUpperCase()+type.slice(1)}`).value = '';
-        };
-      });
-    } else {
-      container.innerHTML = '<div>Nessun risultato</div>';
-    }
-  }
-
-  document.getElementById('searchMovie').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchAndAdd('movie', e.target.value);
+  // Event listener per ricerca in tempo reale
+  document.getElementById('searchMovie').addEventListener('input', (e) => {
+    searchAndAdd('movie', e.target.value);
   });
-  document.getElementById('searchSeries').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchAndAdd('series', e.target.value);
+  document.getElementById('searchSeries').addEventListener('input', (e) => {
+    searchAndAdd('series', e.target.value);
   });
-  document.getElementById('searchAnime').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchAndAdd('anime', e.target.value);
+  document.getElementById('searchAnime').addEventListener('input', (e) => {
+    searchAndAdd('anime', e.target.value);
   });
 
+  // Genera addon
   document.getElementById('generateBtn').onclick = async () => {
     if (selectedMovies.length < 5 || selectedSeries.length < 5) {
-      alert('Devi selezionare almeno 5 film e 5 serie (puoi aggiungerne dalla ricerca)');
+      alert('Devi selezionare almeno 5 film e 5 serie');
       return;
     }
+    
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = 'Generazione in corso <span class="loader"></span>';
+    
     const prefs = document.getElementById('prefs').value;
-    const res = await fetch('/api/save-config', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        stremioEmail: email.value,
-        selectedMovies,
-        selectedSeries,
-        selectedAnime,
-        prefs,
-        existingUuid: currentUserUuid
-      })
-    });
-    const data = await res.json();
-    if (data.success) {
-      document.getElementById('manifestUrl').innerText = data.manifestUrl;
-      document.getElementById('userUuid').innerText = data.userUuid;
-      document.getElementById('result').style.display = 'block';
-      currentUserUuid = data.userUuid;
-    } else {
-      alert('Errore durante il salvataggio');
+    try {
+      const res = await fetch('/api/save-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stremioEmail: email.value || 'manual@mode.com',
+          selectedMovies,
+          selectedSeries,
+          selectedAnime,
+          prefs,
+          existingUuid: currentUserUuid
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('manifestUrl').innerText = data.manifestUrl;
+        document.getElementById('userUuid').innerText = data.userUuid;
+        document.getElementById('result').style.display = 'block';
+        currentUserUuid = data.userUuid;
+      } else {
+        alert('Errore durante il salvataggio');
+      }
+    } catch (err) {
+      alert('Errore: ' + err.message);
+    } finally {
+      generateBtn.disabled = false;
+      generateBtn.innerHTML = '✨ Genera il mio addon';
     }
   };
 </script>
