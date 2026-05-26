@@ -51,6 +51,26 @@
       border-color: #2d3e4f;
       margin: 1rem 0;
     }
+    .install-link {
+      background: #0a0f1a;
+      padding: 12px;
+      border-radius: 12px;
+      word-break: break-all;
+      font-family: monospace;
+      font-size: 0.85rem;
+      margin: 10px 0;
+    }
+    .copy-btn {
+      background: #ffb347;
+      border: none;
+      border-radius: 20px;
+      padding: 6px 12px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 8px;
+      width: auto;
+      display: inline-block;
+    }
   </style>
 </head>
 <body>
@@ -99,14 +119,13 @@
 
   <div id="result" class="result" style="display:none;">
     <h3>✅ Addon creato!</h3>
-    <p>Copia questo link in Stremio (Impostazioni → Addon):</p>
-    <code id="manifestUrl" style="background:#000;display:block;padding:10px;border-radius:12px;word-break:break-all;"></code>
-    <p style="margin-top:1rem;">Oppure usa l'UUID: <strong id="userUuid"></strong></p>
-    <p>I cataloghi sono disponibili agli endpoint:<br>
-    <code>/catalog/movie/&lt;uuid&gt;.json</code><br>
-    <code>/catalog/series/&lt;uuid&gt;.json</code><br>
-    <code>/catalog/anime/&lt;uuid&gt;.json</code>
+    <p><strong>📌 Link da installare in Stremio:</strong></p>
+    <div class="install-link" id="manifestUrl"></div>
+    <button class="copy-btn" onclick="copyToClipboard()">📋 Copia link</button>
+    <p style="margin-top:1rem; font-size:0.8rem; color:#6c7a89;">
+      💡 <strong>Come installare:</strong> Apri Stremio → Impostazioni → Addon → Incolla il link sopra → Installa
     </p>
+    <p style="margin-top:1rem;">UUID: <strong id="userUuid"></strong></p>
   </div>
   <footer>Powered by TMDB • I tuoi seed rimangono privati nel database</footer>
 </div>
@@ -127,7 +146,12 @@
   const seedsStep = document.getElementById('seedsStep');
   const generateBtn = document.getElementById('generateBtn');
 
-  // Funzione per aggiornare i contatori e abilitare il bottone
+  function copyToClipboard() {
+    const url = document.getElementById('manifestUrl').innerText;
+    navigator.clipboard.writeText(url);
+    alert('Link copiato negli appunti!');
+  }
+
   function updateCounters() {
     const movieCount = selectedMovies.length;
     const seriesCount = selectedSeries.length;
@@ -144,7 +168,6 @@
     }
   }
 
-  // Funzione per rimuovere un seed
   window.removeSeed = function(id, type) {
     if (type === 'movie') selectedMovies = selectedMovies.filter(m => m.id != id);
     if (type === 'series') selectedSeries = selectedSeries.filter(s => s.id != id);
@@ -153,7 +176,6 @@
     updateCounters();
   };
 
-  // Render dei chip selezionati
   function renderSelections() {
     const moviesDiv = document.getElementById('selectedMoviesList');
     moviesDiv.innerHTML = selectedMovies.map(m => `<div class="movie-chip">${m.title} <span class="remove" onclick="removeSeed('${m.id}', 'movie')">✖</span></div>`).join('');
@@ -167,7 +189,6 @@
     updateCounters();
   }
 
-  // Funzione di ricerca con suggerimenti in tempo reale
   async function searchAndAdd(type, query) {
     if (!query || query.length < 2) {
       document.getElementById(`${type}Results`).innerHTML = '';
@@ -183,7 +204,7 @@
         container.innerHTML = results.slice(0,5).map(r => {
           const posterUrl = r.poster_path ? `https://image.tmdb.org/t/p/w92${r.poster_path}` : '';
           return `
-            <div class="result-card" data-id="${r.id}" data-title="${r.title.replace(/'/g, "\\'")}" data-poster="${r.poster_path || ''}">
+            <div class="result-card" data-id="${r.id}" data-title="${r.title.replace(/'/g, "\\'")}">
               ${posterUrl ? `<img src="${posterUrl}" style="width: 40px; height: 60px; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'">` : '<div style="width:40px;height:60px;background:#2d3e4f;border-radius:8px;"></div>'}
               <div style="flex:1; margin-left: 10px;">
                 <strong>${r.title}</strong><br>
@@ -194,7 +215,6 @@
           `;
         }).join('');
         
-        // Aggiungi event listener ai bottoni +
         container.querySelectorAll('.addSeedBtn').forEach(btn => {
           btn.onclick = () => {
             const id = btn.dataset.id;
@@ -220,7 +240,6 @@
     }
   }
 
-  // Login Stremio
   loginBtn.onclick = async () => {
     if (isManualMode) return;
     
@@ -239,7 +258,6 @@
       libraryStatus.innerHTML = `<p>✅ Importati ${libraryItems.length} titoli dalla libreria. Ora seleziona i tuoi seed (min 5 film e 5 serie).</p>`;
       seedsStep.style.display = 'block';
       
-      // Pre-seleziona automaticamente i primi 5 film e 5 serie
       const moviesFromLib = libraryItems.filter(i => i.type === 'movie').slice(0, 10);
       const seriesFromLib = libraryItems.filter(i => i.type === 'series').slice(0, 10);
       selectedMovies = moviesFromLib.map(m => ({ id: m.id, title: m.title, tmdb_id: m.tmdb_id }));
@@ -253,7 +271,6 @@
     }
   };
 
-  // Modalità manuale
   manualModeBtn.onclick = () => {
     isManualMode = true;
     email.disabled = true;
@@ -268,7 +285,6 @@
     libraryItems = [];
   };
 
-  // Event listener per ricerca in tempo reale
   document.getElementById('searchMovie').addEventListener('input', (e) => {
     searchAndAdd('movie', e.target.value);
   });
@@ -279,7 +295,6 @@
     searchAndAdd('anime', e.target.value);
   });
 
-  // Genera addon
   document.getElementById('generateBtn').onclick = async () => {
     if (selectedMovies.length < 5 || selectedSeries.length < 5) {
       alert('Devi selezionare almeno 5 film e 5 serie');
@@ -305,6 +320,7 @@
       });
       const data = await res.json();
       if (data.success) {
+        // Mostra il link corretto: manifest.json?uuid=...
         document.getElementById('manifestUrl').innerText = data.manifestUrl;
         document.getElementById('userUuid').innerText = data.userUuid;
         document.getElementById('result').style.display = 'block';
