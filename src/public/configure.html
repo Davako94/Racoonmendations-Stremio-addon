@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>Configura il tuo addon - Stremio Recommendations</title>
+  <title>Configure Smart Recommendations - Stremio Addon</title>
   <style>
     body { background: #0a0f1a; color: #e0e0e0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 1rem; margin: 0; }
     .container { max-width: 700px; margin: 0 auto; background: #141a24; border-radius: 28px; padding: 1.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
@@ -32,9 +32,7 @@
       gap: 12px;
       transition: 0.2s;
     }
-    .result-card:hover {
-      background: #2d3e4f;
-    }
+    .result-card:hover { background: #2d3e4f; }
     .addSeedBtn {
       background: #ffb347;
       border: none;
@@ -44,13 +42,7 @@
       font-weight: bold;
       margin-left: auto;
     }
-    .addSeedBtn:hover {
-      background: #ffa01e;
-    }
-    hr {
-      border-color: #2d3e4f;
-      margin: 1rem 0;
-    }
+    hr { border-color: #2d3e4f; margin: 1rem 0; }
     .install-link {
       background: #0a0f1a;
       padding: 12px;
@@ -71,85 +63,90 @@
       width: auto;
       display: inline-block;
     }
+    .language-selector {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.5rem;
+    }
+    .lang-btn {
+      background: #1e2a3a;
+      border: 2px solid #2d3e4f;
+      border-radius: 40px;
+      padding: 0.5rem 1rem;
+      cursor: pointer;
+      width: auto;
+      margin-top: 0;
+    }
+    .lang-btn.active {
+      background: #ffb347;
+      color: #0a0f1a;
+      border-color: #ffb347;
+    }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>🎬 Smart Recommendations</h1>
-  <p>Importa la tua <strong>libreria Stremio</strong> (autenticazione sicura) oppure usa la <strong>selezione manuale</strong>. L'addon genererà raccomandazioni personalizzate.</p>
+  <p>Create personalized recommendations based on your favorite movies and series. The addon will generate "Similar to X" sections for each of your selected titles.</p>
 
   <div class="step">
-    <h2>1️⃣ Accedi a Stremio (opzionale)</h2>
-    <input type="email" id="email" placeholder="Email Stremio" autocomplete="off">
-    <input type="password" id="password" placeholder="Password Stremio">
-    <button id="loginBtn">📥 Importa libreria</button>
-    
-    <hr>
-    <div style="text-align: center;">
-      <button id="manualModeBtn" style="background: #2d3e4f; color: #ffb347;">✏️ Passa alla selezione manuale</button>
+    <h2>1️⃣ Select your language / Scegli la lingua</h2>
+    <div class="language-selector" id="languageSelector">
+      <button class="lang-btn" data-lang="en">🇬🇧 English</button>
+      <button class="lang-btn" data-lang="it">🇮🇹 Italiano</button>
+      <button class="lang-btn" data-lang="de">🇩🇪 Deutsch</button>
+      <button class="lang-btn" data-lang="es">🇪🇸 Español</button>
+      <button class="lang-btn" data-lang="fr">🇫🇷 Français</button>
     </div>
-    
-    <div id="libraryStatus"></div>
   </div>
 
-  <div class="step" id="seedsStep" style="display:none;">
-    <h2>2️⃣ Scegli i tuoi seed (min 5 film + 5 serie)</h2>
-    <div class="warning">⚠️ Le raccomandazioni saranno basate su questi titoli. Clicca sui chip per rimuovere.</div>
+  <div class="step">
+    <h2>2️⃣ Choose your favorite titles</h2>
+    <div class="warning">⚠️ Recommendations will be based on these titles. Select at least 5 movies and 5 series.</div>
     
-    <label>🎥 Film preferiti (<span id="movieCount">0</span>/5 minimo)</label>
+    <label>🎥 Favorite Movies (<span id="movieCount">0</span>/5 minimum)</label>
     <div id="selectedMoviesList" class="movie-grid"></div>
-    <input type="text" id="searchMovie" placeholder="Cerca film (min 2 caratteri)...">
+    <input type="text" id="searchMovie" placeholder="Search movies (min 2 characters)...">
     <div id="movieResults"></div>
 
-    <label>📺 Serie preferite (<span id="seriesCount">0</span>/5 minimo)</label>
+    <label>📺 Favorite Series (<span id="seriesCount">0</span>/5 minimum)</label>
     <div id="selectedSeriesList" class="movie-grid"></div>
-    <input type="text" id="searchSeries" placeholder="Cerca serie (min 2 caratteri)...">
+    <input type="text" id="searchSeries" placeholder="Search series (min 2 characters)...">
     <div id="seriesResults"></div>
 
-    <label>🍥 Anime preferiti (opzionale)</label>
-    <div id="selectedAnimeList" class="movie-grid"></div>
-    <input type="text" id="searchAnime" placeholder="Cerca anime...">
-    <div id="animeResults"></div>
+    <label>⭐ Extra preferences (optional)</label>
+    <textarea id="prefs" placeholder="e.g., avoid horror, only post-2000 movies, minimum rating 7"></textarea>
 
-    <label>⭐ Preferenze extra (opzionale)</label>
-    <textarea id="prefs" placeholder="Es. evita horror, solo film post-2000, rating minimo 7"></textarea>
-
-    <button id="generateBtn" disabled style="background: #555;">✨ Genera il mio addon (serve minimo 5 film e 5 serie)</button>
+    <button id="generateBtn" disabled style="background: #555;">✨ Generate My Addon (need 5 movies + 5 series)</button>
   </div>
 
   <div id="result" class="result" style="display:none;">
-    <h3>✅ Addon creato!</h3>
-    <p><strong>📌 Link da installare in Stremio:</strong></p>
+    <h3>✅ Addon Created!</h3>
+    <p><strong>📌 Install this link in Stremio:</strong></p>
     <div class="install-link" id="manifestUrl"></div>
-    <button class="copy-btn" onclick="copyToClipboard()">📋 Copia link</button>
+    <button class="copy-btn" onclick="copyToClipboard()">📋 Copy Link</button>
     <p style="margin-top:1rem; font-size:0.8rem; color:#6c7a89;">
-      💡 <strong>Come installare:</strong> Apri Stremio → Impostazioni → Addon → Incolla il link sopra → Installa
+      💡 <strong>How to install:</strong> Open Stremio → Settings → Addons → Paste the link → Install
     </p>
     <p style="margin-top:1rem;">UUID: <strong id="userUuid"></strong></p>
   </div>
-  <footer>Powered by TMDB • I tuoi seed rimangono privati nel database</footer>
+  <footer>Powered by TMDB • Your seeds remain private in the database</footer>
 </div>
 
 <script>
-  let libraryItems = [];
   let selectedMovies = [];
   let selectedSeries = [];
-  let selectedAnime = [];
   let currentUserUuid = null;
-  let isManualMode = false;
+  let selectedLanguage = 'en';
 
-  const loginBtn = document.getElementById('loginBtn');
-  const manualModeBtn = document.getElementById('manualModeBtn');
-  const email = document.getElementById('email');
-  const password = document.getElementById('password');
-  const libraryStatus = document.getElementById('libraryStatus');
-  const seedsStep = document.getElementById('seedsStep');
   const generateBtn = document.getElementById('generateBtn');
+  const languageSelector = document.getElementById('languageSelector');
 
   function copyToClipboard() {
     const url = document.getElementById('manifestUrl').innerText;
     navigator.clipboard.writeText(url);
-    alert('Link copiato negli appunti!');
+    alert('Link copied!');
   }
 
   function updateCounters() {
@@ -171,7 +168,6 @@
   window.removeSeed = function(id, type) {
     if (type === 'movie') selectedMovies = selectedMovies.filter(m => m.id != id);
     if (type === 'series') selectedSeries = selectedSeries.filter(s => s.id != id);
-    if (type === 'anime') selectedAnime = selectedAnime.filter(a => a.id != id);
     renderSelections();
     updateCounters();
   };
@@ -183,9 +179,6 @@
     const seriesDiv = document.getElementById('selectedSeriesList');
     seriesDiv.innerHTML = selectedSeries.map(s => `<div class="movie-chip">${s.title} <span class="remove" onclick="removeSeed('${s.id}', 'series')">✖</span></div>`).join('');
     
-    const animeDiv = document.getElementById('selectedAnimeList');
-    animeDiv.innerHTML = selectedAnime.map(a => `<div class="movie-chip">${a.title} <span class="remove" onclick="removeSeed('${a.id}', 'anime')">✖</span></div>`).join('');
-    
     updateCounters();
   }
 
@@ -196,7 +189,7 @@
     }
     
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}`);
+      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}&type=${type}&language=${selectedLanguage}`);
       const results = await res.json();
       const container = document.getElementById(`${type}Results`);
       
@@ -224,7 +217,6 @@
             
             if (seedType === 'movie') selectedMovies.push(seedToAdd);
             else if (seedType === 'series') selectedSeries.push(seedToAdd);
-            else if (seedType === 'anime') selectedAnime.push(seedToAdd);
             
             renderSelections();
             container.innerHTML = '';
@@ -232,77 +224,42 @@
           };
         });
       } else {
-        container.innerHTML = '<div style="padding: 10px; color: gray;">Nessun risultato trovato</div>';
+        container.innerHTML = '<div style="padding: 10px; color: gray;">No results found</div>';
       }
     } catch (err) {
       console.error('Search error:', err);
-      document.getElementById(`${type}Results`).innerHTML = '<div style="padding: 10px; color: red;">Errore di ricerca</div>';
+      document.getElementById(`${type}Results`).innerHTML = '<div style="padding: 10px; color: red;">Search error</div>';
     }
   }
 
-  loginBtn.onclick = async () => {
-    if (isManualMode) return;
-    
-    loginBtn.disabled = true;
-    loginBtn.innerHTML = 'Importazione in corso <span class="loader"></span>';
-    try {
-      const res = await fetch('/api/stremio/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.value, password: password.value })
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error);
-      
-      libraryItems = data.library;
-      libraryStatus.innerHTML = `<p>✅ Importati ${libraryItems.length} titoli dalla libreria. Ora seleziona i tuoi seed (min 5 film e 5 serie).</p>`;
-      seedsStep.style.display = 'block';
-      
-      const moviesFromLib = libraryItems.filter(i => i.type === 'movie').slice(0, 10);
-      const seriesFromLib = libraryItems.filter(i => i.type === 'series').slice(0, 10);
-      selectedMovies = moviesFromLib.map(m => ({ id: m.id, title: m.title, tmdb_id: m.tmdb_id }));
-      selectedSeries = seriesFromLib.map(s => ({ id: s.id, title: s.title, tmdb_id: s.tmdb_id }));
-      renderSelections();
-    } catch (err) {
-      libraryStatus.innerHTML = `<p style="color:#ff8a7a;">❌ Errore: ${err.message}. Usa la selezione manuale.</p>`;
-    } finally {
-      loginBtn.disabled = false;
-      loginBtn.innerHTML = '📥 Importa libreria';
-    }
-  };
+  // Language selector
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedLanguage = btn.dataset.lang;
+    };
+  });
+  // Set default active
+  document.querySelector('.lang-btn[data-lang="en"]').classList.add('active');
 
-  manualModeBtn.onclick = () => {
-    isManualMode = true;
-    email.disabled = true;
-    password.disabled = true;
-    loginBtn.disabled = true;
-    loginBtn.style.opacity = '0.5';
-    manualModeBtn.disabled = true;
-    manualModeBtn.style.opacity = '0.5';
-    
-    seedsStep.style.display = 'block';
-    libraryStatus.innerHTML = `<p>🔧 Modalità manuale attivata. Cerca e seleziona i tuoi film, serie e anime preferiti (minimo 5 ciascuno).</p>`;
-    libraryItems = [];
-  };
-
+  // Search inputs
   document.getElementById('searchMovie').addEventListener('input', (e) => {
     searchAndAdd('movie', e.target.value);
   });
   document.getElementById('searchSeries').addEventListener('input', (e) => {
     searchAndAdd('series', e.target.value);
   });
-  document.getElementById('searchAnime').addEventListener('input', (e) => {
-    searchAndAdd('anime', e.target.value);
-  });
 
+  // Generate addon
   document.getElementById('generateBtn').onclick = async () => {
     if (selectedMovies.length < 5 || selectedSeries.length < 5) {
-      alert('Devi selezionare almeno 5 film e 5 serie');
+      alert('Please select at least 5 movies and 5 series');
       return;
     }
     
     generateBtn.disabled = true;
-    generateBtn.innerHTML = 'Generazione in corso <span class="loader"></span>';
+    generateBtn.innerHTML = 'Generating <span class="loader"></span>';
     
     const prefs = document.getElementById('prefs').value;
     try {
@@ -310,29 +267,29 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          stremioEmail: email.value || 'manual@mode.com',
+          stremioEmail: 'manual@mode.com',
           selectedMovies,
           selectedSeries,
-          selectedAnime,
+          selectedAnime: [],
+          language: selectedLanguage,
           prefs,
           existingUuid: currentUserUuid
         })
       });
       const data = await res.json();
       if (data.success) {
-        // Mostra il link corretto: manifest.json?uuid=...
         document.getElementById('manifestUrl').innerText = data.manifestUrl;
         document.getElementById('userUuid').innerText = data.userUuid;
         document.getElementById('result').style.display = 'block';
         currentUserUuid = data.userUuid;
       } else {
-        alert('Errore durante il salvataggio');
+        alert('Error saving configuration');
       }
     } catch (err) {
-      alert('Errore: ' + err.message);
+      alert('Error: ' + err.message);
     } finally {
       generateBtn.disabled = false;
-      generateBtn.innerHTML = '✨ Genera il mio addon';
+      generateBtn.innerHTML = '✨ Generate My Addon';
     }
   };
 </script>
