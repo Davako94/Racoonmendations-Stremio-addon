@@ -1,0 +1,5 @@
+TMDB_API_KEY=your_tmdb_key_here
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_SERVICE_KEY=your_supabase_service_role_key
+ADDON_BASE_URL=https://your-addon.vercel.app
+PORT=3000
