@@ -4,7 +4,11 @@ const path = require('path');
 const fetch = require('node-fetch');
 const catalogHandler = require('./src/handlers/catalog');
 const { getManifest } = require('./src/manifest');
-const { saveUserConfig, getUserConfig } = require('./src/services/userStore');
+const { 
+  saveUserConfig, 
+  getUserConfig, 
+  getUserConfigByEmail  // <-- AGGIUNGI QUESTA
+} = require('./src/services/userStore');
 const stremioApi = require('./src/services/stremioApi');
 const tmdb = require('./src/services/tmdb');
 
@@ -24,20 +28,19 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST - supporta TUTTI i formati
+// MANIFEST
 // ============================================================
-
-// Formato 1: /manifest.json (base, nessun UUID)
 app.get('/manifest.json', async (req, res) => {
+  const userUuid = req.query.uuid;
   try {
-    const manifest = await getManifest(null);
+    const manifest = await getManifest(userUuid);
     res.json(manifest);
   } catch (err) {
+    console.error('Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
   }
 });
 
-// Formato 2: /:uuid/manifest.json (Stremio con UUID nel path)
 app.get('/:uuid/manifest.json', async (req, res) => {
   try {
     const manifest = await getManifest(req.params.uuid);
@@ -47,7 +50,6 @@ app.get('/:uuid/manifest.json', async (req, res) => {
   }
 });
 
-// Formato 3: /stremio/:uuid/config/manifest.json (AIOMetadata)
 app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
   try {
     const manifest = await getManifest(req.params.uuid);
@@ -58,15 +60,11 @@ app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
 });
 
 // ============================================================
-// CATALOGO - supporta TUTTI i formati
+// CATALOGO
 // ============================================================
-
-// Formato 1: /catalog/:type/:catalogId.json (UUID nella query string)
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   const { type, catalogId } = req.params;
   const userUuid = req.query.uuid;
-  
-  console.log(`📺 Catalog: ${type}/${catalogId} (uuid: ${userUuid})`);
   
   if (!['movie', 'series'].includes(type)) {
     return res.json({ metas: [] });
@@ -81,11 +79,8 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   }
 });
 
-// Formato 2: /:uuid/catalog/:type/:catalogId.json (UUID nel path)
 app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
   const { uuid, type, catalogId } = req.params;
-  
-  console.log(`📺 Catalog: ${type}/${catalogId} (uuid from path: ${uuid})`);
   
   if (!['movie', 'series'].includes(type)) {
     return res.json({ metas: [] });
@@ -100,11 +95,8 @@ app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
   }
 });
 
-// Formato 3: /stremio/:uuid/catalog/:type/:catalogId.json (AIOMetadata)
 app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
   const { uuid, type, catalogId } = req.params;
-  
-  console.log(`📺 AIOMetadata Catalog: ${type}/${catalogId} (uuid: ${uuid})`);
   
   if (!['movie', 'series'].includes(type)) {
     return res.json({ metas: [] });
@@ -239,7 +231,7 @@ app.post('/api/save-config', async (req, res) => {
   
   try {
     // Cerca se esiste già un utente con questa email
-    const { data: existing } = await getUserConfigByEmail?.(stremioEmail) || {};
+    const existing = await getUserConfigByEmail(stremioEmail);
     const userUuid = existing?.uuid || existingUuid || uuidv4();
     
     const finalUuid = await saveUserConfig(userUuid, {
@@ -252,7 +244,6 @@ app.post('/api/save-config', async (req, res) => {
     });
 
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    // URL nel formato che Stremio accetta: /manifest.json?uuid=xxx
     const manifestUrl = `${baseUrl}/manifest.json?uuid=${finalUuid}`;
 
     console.log(`✅ Config saved for user: ${finalUuid}`);
