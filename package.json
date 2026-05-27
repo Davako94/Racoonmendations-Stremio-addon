@@ -1,7 +1,7 @@
 {
-  "name": "racoonmendations",
+  "name": "raccoonmendations",
   "version": "3.0.0",
-  "description": "Racoonmendations - Personalized movie & series recommendations for Stremio",
+  "description": "Raccoonmendations - Personalized movie & series recommendations for Stremio",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
