@@ -17,11 +17,7 @@ async function saveUserConfig(uuid, data) {
 }
 
 async function getUserConfig(uuid) {
-  const { data, error } = await supabase
-    .from('user_configs')
-    .select('*')
-    .eq('uuid', uuid)
-    .single();
+  const { data, error } = await supabase.from('user_configs').select('*').eq('uuid', uuid).single();
   if (error) return null;
   return data;
 }
@@ -29,12 +25,10 @@ async function getUserConfig(uuid) {
 async function getUserSeeds(uuid, catalogType) {
   const config = await getUserConfig(uuid);
   if (!config) return [];
-
   let seeds = [];
-  if (catalogType === 'movie') seeds = config.selected_movies || [];
+  if (catalogType === 'movie')  seeds = config.selected_movies || [];
   else if (catalogType === 'series') seeds = config.selected_series || [];
-  else if (catalogType === 'anime') seeds = config.selected_anime || [];
-
+  else if (catalogType === 'anime')  seeds = config.selected_anime  || [];
   return seeds.map(s => ({ ...s, type: catalogType }));
 }
 
@@ -47,34 +41,19 @@ async function updateUserSeeds(uuid, catalogType, seeds) {
   const config = await getUserConfig(uuid);
   if (!config) return;
   const update = {};
-  if (catalogType === 'movie') update.selected_movies = seeds;
+  if (catalogType === 'movie')  update.selected_movies = seeds;
   else if (catalogType === 'series') update.selected_series = seeds;
-  else if (catalogType === 'anime') update.selected_anime = seeds;
+  else if (catalogType === 'anime')  update.selected_anime  = seeds;
   await supabase.from('user_configs').update(update).eq('uuid', uuid);
 }
 
-// ─── NUOVO ────────────────────────────────────────────────────────────────────
-// Restituisce i titoli scelti dall'utente durante il setup come "libreria base"
-// per alimentare il motore di raccomandazioni personalizzate.
-// Normalizza il campo ID: accetta sia { tmdbId } che { id } che { imdbId }.
+// Normalizza i seed della libreria per il motore di raccomandazioni.
+// Accetta id in qualsiasi campo: tmdbId | id | imdbId
 async function getUserLibrary(uuid, catalogType) {
   const seeds = await getUserSeeds(uuid, catalogType);
-
   return seeds
-    .map(s => ({
-      // Risolvi l'ID nel formato più probabile salvato dal configure
-      id: s.tmdbId || s.id || s.imdbId || null,
-      title: s.title || s.name || null,
-      type: catalogType
-    }))
+    .map(s => ({ id: s.tmdbId || s.tmdb_id || s.id || s.imdbId || null, title: s.title || s.name || null, type: catalogType }))
     .filter(s => s.id !== null);
 }
 
-module.exports = {
-  saveUserConfig,
-  getUserConfig,
-  getUserSeeds,
-  getUserLanguage,
-  updateUserSeeds,
-  getUserLibrary      // ← esportata
-};
+module.exports = { saveUserConfig, getUserConfig, getUserSeeds, getUserLanguage, updateUserSeeds, getUserLibrary };
