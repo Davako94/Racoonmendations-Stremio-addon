@@ -60,7 +60,7 @@ async function getUserConfig(uuid) {
 async function getUserConfigByEmail(email) {
   const { data, error } = await supabase
     .from('user_configs')
-    .select('*')
+    .select('uuid, selected_movies, selected_series, selected_anime, language, preferences')
     .eq('stremio_email', email)
     .maybeSingle();
   if (error) return null;
