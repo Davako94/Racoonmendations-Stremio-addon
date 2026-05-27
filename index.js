@@ -14,7 +14,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST - STATICO (compatibile Stremio)
+// MANIFEST - STATICO & DINAMICO (compatibile Stremio)
 // ============================================================
 app.get('/manifest.json', (req, res) => {
   try {
@@ -25,47 +25,66 @@ app.get('/manifest.json', (req, res) => {
     res.status(500).json({ 
       id: "racconmendations",
       version: "3.0.0",
-      name: "Racconmendations",
+      name: "Racconmendations Error",
       description: "Error loading manifest",
       resources: ["catalog"],
       types: ["movie", "series"],
-      catalogs: [
-        { type: "movie", id: "raccon-movies", name: "🎬 Racconmendations Movies" },
-        { type: "series", id: "raccon-series", name: "📺 Racconmendations Series" }
-      ],
+      catalogs: [],
       idPrefixes: ["tt", "tmdb"]
     });
   }
 });
 
-// Endpoint per aiometadata
+// Endpoint per aiometadata / Installazioni dinamiche Stremio
 app.get('/stremio/:userUuid/:compressedConfig/manifest.json', (req, res) => {
   try {
+    // Volendo potresti passare req.params.userUuid a getManifest se un giorno vorrai personalizzarlo
     const manifest = getManifest();
     res.json(manifest);
   } catch (err) {
+    console.error('❌ Dynamic Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
   }
 });
 
 // ============================================================
-// CATALOGO
+// CATALOGO (Rotte native Stremio e Fallback)
 // ============================================================
-app.get('/catalog/:type/:catalogId.json', async (req, res) => {
-  const { type, catalogId } = req.params;
+
+// 1. ROTTA NATIVA STREMIO (Parametri nel path) - FONDAMENTALE
+app.get('/stremio/:userUuid/:compressedConfig/catalog/:type/:catalogId.json', async (req, res) => {
+  const { userUuid, type, catalogId } = req.params;
   
-  console.log(`📺 Catalog request: type=${type}, catalogId=${catalogId}`);
+  console.log(`📺 Stremio Path request: type=${type}, catalogId=${catalogId}, uuid=${userUuid}`);
   
   if (!['movie', 'series'].includes(type)) {
     return res.status(400).json({ metas: [] });
   }
   
   try {
-    // Leggi l'UUID dalla query string
+    // Passiamo tipo, ID del catalogo specifico (es. raccon-anime) e UUID
+    const metas = await catalogHandler.getCatalog(type, catalogId, userUuid);
+    res.json({ metas: metas || [] });
+  } catch (err) {
+    console.error('❌ Path Catalog error:', err);
+    res.status(500).json({ metas: [] });
+  }
+});
+
+// 2. ROTTA FALLBACK / LEGACY (Con query string)
+app.get('/catalog/:type/:catalogId.json', async (req, res) => {
+  const { type, catalogId } = req.params;
+  
+  console.log(`📺 Legacy Catalog request: type=${type}, catalogId=${catalogId}`);
+  
+  if (!['movie', 'series'].includes(type)) {
+    return res.status(400).json({ metas: [] });
+  }
+  
+  try {
     const userUuid = req.query.uuid;
     
     if (!userUuid) {
-      // Nessun UUID configurato - mostra messaggio di setup
       const setupMetas = [{
         id: "setup_placeholder",
         type: type,
@@ -78,10 +97,10 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
       return res.json({ metas: setupMetas });
     }
     
-    const metas = await catalogHandler.getCatalog(type, userUuid);
-    res.json({ metas });
+    const metas = await catalogHandler.getCatalog(type, catalogId, userUuid);
+    res.json({ metas: metas || [] });
   } catch (err) {
-    console.error('Catalog error:', err);
+    console.error('❌ Legacy Catalog error:', err);
     res.status(500).json({ metas: [] });
   }
 });
@@ -119,7 +138,6 @@ app.get('/api/poster', async (req, res) => {
   }
 });
 
-// Poster proxy per aiometadata
 app.get('/poster/:type/:id', async (req, res) => {
   const { type, id } = req.params;
   try {
@@ -148,13 +166,10 @@ app.get('/poster/:type/:id', async (req, res) => {
 });
 
 // ============================================================
-// API: Config endpoints
+// API: CONFIGURATION ENDPOINTS
 // ============================================================
-
-// Save user config
 app.post('/api/config/save', async (req, res) => {
   const { userUuid, stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs } = req.body;
-  
   const finalUuid = userUuid || uuidv4();
   
   try {
@@ -168,7 +183,8 @@ app.post('/api/config/save', async (req, res) => {
     });
     
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    const manifestUrl = `${baseUrl}/catalog/movie/raccon-movies.json?uuid=${finalUuid}`;
+    // FIX STREMIO: L'URL restituito deve essere il manifest path-based, non il catalogo legacy
+    const manifestUrl = `${baseUrl}/stremio/${finalUuid}/config/manifest.json`;
     
     console.log(`✅ Config saved for user: ${finalUuid}`);
     res.json({ success: true, manifestUrl, userUuid: finalUuid });
@@ -178,7 +194,6 @@ app.post('/api/config/save', async (req, res) => {
   }
 });
 
-// Load user config
 app.post('/api/config/load/:userUuid', async (req, res) => {
   const { userUuid } = req.params;
   try {
@@ -202,7 +217,6 @@ app.post('/api/config/load/:userUuid', async (req, res) => {
   }
 });
 
-// Update user config
 app.put('/api/config/update/:userUuid', async (req, res) => {
   const { userUuid } = req.params;
   const { selectedMovies, selectedSeries, selectedAnime, language, prefs } = req.body;
@@ -229,7 +243,6 @@ app.put('/api/config/update/:userUuid', async (req, res) => {
   }
 });
 
-// Check if UUID is trusted
 app.get('/api/config/is-trusted/:uuid', async (req, res) => {
   const { uuid } = req.params;
   try {
@@ -240,8 +253,34 @@ app.get('/api/config/is-trusted/:uuid', async (req, res) => {
   }
 });
 
+// Legacy Save Endpoint
+app.post('/api/save-config', async (req, res) => {
+  const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
+  const userUuid = existingUuid || uuidv4();
+  
+  try {
+    await saveUserConfig(userUuid, {
+      stremioEmail: stremioEmail || 'manual@mode.com',
+      selectedMovies: selectedMovies || [],
+      selectedSeries: selectedSeries || [],
+      selectedAnime: selectedAnime || [],
+      language: language || 'en',
+      prefs: prefs || ''
+    });
+    
+    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const manifestUrl = `${baseUrl}/stremio/${userUuid}/config/manifest.json`;
+    
+    console.log(`✅ Config saved for user: ${userUuid}`);
+    res.json({ success: true, manifestUrl, userUuid });
+  } catch (error) {
+    console.error('❌ Error saving config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================================
-// API: LOGIN STREMIO
+// API: LOGIN STREMIO & TMDB SEARCH
 // ============================================================
 app.post('/api/stremio/login', async (req, res) => {
   const { email, password } = req.body;
@@ -251,18 +290,12 @@ app.post('/api/stremio/login', async (req, res) => {
   
   try {
     console.log(`🔐 Attempting Stremio login for: ${email}`);
-    
     const auth = await stremioApi.stremioLogin(email, password);
     console.log('✅ Stremio login successful');
     
     const rawLibrary = await stremioApi.getStremioLibraryRaw(auth.token);
-    console.log(`📚 Raw library items: ${rawLibrary.length}`);
-    
     const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
-    
     const continueWatching = stremioApi.getContinueWatchingFromLibrary(rawLibrary);
-    console.log(`⏯️ Continue watching: ${continueWatching.length}`);
-    
     const seeds = stremioApi.extractSeedsFromLibrary(rawLibrary, continueWatching);
     
     const enrichedSeeds = await Promise.all(seeds.map(async (seed) => {
@@ -323,45 +356,9 @@ app.post('/api/stremio/login', async (req, res) => {
   }
 });
 
-// ============================================================
-// API: SALVA CONFIGURAZIONE UTENTE (legacy)
-// ============================================================
-app.post('/api/save-config', async (req, res) => {
-  const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
-  
-  const userUuid = existingUuid || uuidv4();
-  
-  try {
-    await saveUserConfig(userUuid, {
-      stremioEmail: stremioEmail || 'manual@mode.com',
-      selectedMovies: selectedMovies || [],
-      selectedSeries: selectedSeries || [],
-      selectedAnime: selectedAnime || [],
-      language: language || 'en',
-      prefs: prefs || ''
-    });
-    
-    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    const manifestUrl = `${baseUrl}/catalog/movie/raccon-movies.json?uuid=${userUuid}`;
-    
-    console.log(`✅ Config saved for user: ${userUuid}`);
-    
-    res.json({ success: true, manifestUrl, userUuid });
-  } catch (error) {
-    console.error('❌ Error saving config:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============================================================
-// API: RICERCA TMDB
-// ============================================================
 app.get('/api/search', async (req, res) => {
   const { q, type, language = 'en' } = req.query;
-  
-  if (!q || q.length < 2) {
-    return res.json([]);
-  }
+  if (!q || q.length < 2) return res.json([]);
   
   try {
     let results;
@@ -378,7 +375,7 @@ app.get('/api/search', async (req, res) => {
 });
 
 // ============================================================
-// API: LINGUE SUPPORTATE
+// API UTILITY (Lingue, Cache, Health)
 // ============================================================
 app.get('/api/languages', (req, res) => {
   res.json([
@@ -390,9 +387,6 @@ app.get('/api/languages', (req, res) => {
   ]);
 });
 
-// ============================================================
-// API: INVALIDA CACHE
-// ============================================================
 app.post('/api/invalidate/:userUuid', (req, res) => {
   const { userUuid } = req.params;
   if (catalogHandler && catalogHandler.invalidateCache) {
@@ -402,16 +396,11 @@ app.post('/api/invalidate/:userUuid', (req, res) => {
   res.json({ ok: true });
 });
 
-// ============================================================
-// API: STATISTICHE UTENTE
-// ============================================================
 app.get('/api/user-stats/:userUuid', async (req, res) => {
   const { userUuid } = req.params;
   try {
     const config = await getUserConfig(userUuid);
-    if (!config) {
-      return res.json({ success: false, error: 'User not found' });
-    }
+    if (!config) return res.json({ success: false, error: 'User not found' });
     
     res.json({
       success: true,
@@ -428,17 +417,11 @@ app.get('/api/user-stats/:userUuid', async (req, res) => {
   }
 });
 
-// ============================================================
-// CACHE ADMIN
-// ============================================================
 app.get('/api/cache/health', (req, res) => {
   const keysCount = catalogHandler?.cache?.keys()?.length || 0;
   res.json({ status: 'ok', keys: keysCount });
 });
 
-// ============================================================
-// HEALTH CHECK
-// ============================================================
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
