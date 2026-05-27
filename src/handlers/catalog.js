@@ -1,6 +1,6 @@
 const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
-const { getUserLanguage, getUserLibrary } = require('../services/userStore');
+const { getUserLanguage, getUserConfig } = require('../services/userStore');
 
 const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
 
@@ -45,12 +45,12 @@ function scoreCandidate(candidate, seed) {
   return { ...candidate, score, keywordOverlap, genreOverlap };
 }
 
-async function buildCandidates(mediaType, rawSeedId, language) {
-  console.log(`🎯 buildCandidates → ${rawSeedId}`);
+async function buildCandidates(mediaType, seedId, language, seedTitle) {
+  console.log(`🎯 buildCandidates → ${seedId} (${seedTitle})`);
 
-  const metadata = await tmdb.getFullDetails(mediaType, rawSeedId, language);
+  const metadata = await tmdb.getFullDetails(mediaType, seedId, language);
   if (!metadata) {
-    console.error(`   ❌ getFullDetails fallito per ID: ${rawSeedId}`);
+    console.error(`   ❌ getFullDetails fallito per ID: ${seedId}`);
     return [];
   }
 
@@ -137,185 +137,141 @@ async function buildCandidates(mediaType, rawSeedId, language) {
     console.log(`     "${c.title}" score:${Math.round(c.score)} kw:${c.keywordOverlap} src:${c._source}`)
   );
 
-  return final;
-}
-
-async function buildPersonalizedRecs(mediaType, userUuid, language) {
-  console.log(`🧠 buildPersonalizedRecs → user: ${userUuid}, type: ${mediaType}`);
-
-  const libraryItems = await getUserLibrary(userUuid, mediaType);
-
-  if (!libraryItems.length) {
-    console.log('   Libreria vuota → fallback popular');
-    return await tmdb.getPopular(mediaType, language, 2);
-  }
-
-  console.log(`   Titoli in libreria: ${libraryItems.length}`);
-
-  const detailsList = await Promise.allSettled(
-    libraryItems.map(item => tmdb.getFullDetails(mediaType, item.id, language))
-  );
-
-  const validSeeds = detailsList
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
-    .map(r => r.value);
-
-  console.log(`   Seed risolti: ${validSeeds.length}/${libraryItems.length}`);
-
-  if (!validSeeds.length) {
-    console.log('   Nessun seed valido → fallback popular');
-    return await tmdb.getPopular(mediaType, language, 2);
-  }
-
-  const keywordFreq = {};
-  const genreFreq   = {};
-  const networkFreq = {};
-  const libraryIds  = new Set();
-
-  for (const seed of validSeeds) {
-    libraryIds.add(seed.id);
-    for (const kwId of seed.keywordIds)    keywordFreq[kwId] = (keywordFreq[kwId] || 0) + 1;
-    for (const g of seed.genres)           genreFreq[g.id]   = (genreFreq[g.id]   || 0) + 1;
-    for (const nId of seed.networkIds)     networkFreq[nId]  = (networkFreq[nId]  || 0) + 1;
-  }
-
-  const topKeywords = Object.entries(keywordFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => Number(id));
-  const topGenres = Object.entries(genreFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => Number(id));
-  const topNetworks = Object.entries(networkFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 2).map(([id]) => Number(id));
-
-  console.log(`   Profilo utente:`);
-  console.log(`     Keywords: ${topKeywords.join(', ')}`);
-  console.log(`     Genres:   ${topGenres.join(', ')}`);
-  if (topNetworks.length) console.log(`     Networks: ${topNetworks.join(', ')}`);
-
-  const candidateMap = new Map();
-
-  const addToMap = (items, bonus) => {
-    for (const item of items) {
-      // 🔧 FIX CRUCIALE: filtra per tipo (movie vs series)
-      if (item.media_type !== mediaType) continue;
-      if (libraryIds.has(item.id)) continue;
-      if (!candidateMap.has(item.id)) {
-        candidateMap.set(item.id, { ...item, _scoreBonus: bonus, _source: 'personalized' });
-      } else {
-        candidateMap.get(item.id)._scoreBonus += Math.round(bonus * 0.4);
-      }
-    }
-  };
-
-  const discoverResults = await Promise.allSettled([
-    topKeywords.length
-      ? tmdb.discover(mediaType, { with_keywords: topKeywords.join(',') }, language, 2)
-      : Promise.resolve([]),
-    topGenres.length
-      ? tmdb.discover(mediaType, { with_genres: topGenres.join(','), sort_by: 'vote_average.desc' }, language, 2)
-      : Promise.resolve([]),
-    topNetworks.length && mediaType === 'tv'
-      ? tmdb.discover(mediaType, { with_networks: topNetworks.join('|') }, language, 1)
-      : Promise.resolve([])
-  ]);
-
-  const [byKeyword, byGenre, byNetwork] = discoverResults;
-  if (byKeyword.status === 'fulfilled') addToMap(byKeyword.value, 60);
-  if (byGenre.status === 'fulfilled')   addToMap(byGenre.value,   30);
-  if (byNetwork.status === 'fulfilled') addToMap(byNetwork.value, 40);
-
-  const userSeed = {
-    seedKeywordIds: topKeywords,
-    seedGenreIds:   topGenres,
-    seedCompanyIds: [],
-    seedNetworkIds: topNetworks,
-    seedCreatorIds: []
-  };
-
-  const candidates = [...candidateMap.values()];
-  console.log(`   Candidati discover: ${candidates.length}`);
-
-  const pool = candidates.slice(0, 60);
-  const detailsForPool = await tmdb.getDetailsBatch(
-    mediaType, pool.map(c => c.id), language, 8
-  );
-
-  const scored = [];
-  for (let i = 0; i < pool.length; i++) {
-    if (!detailsForPool[i]) continue;
-    const result = scoreCandidate({ ...pool[i], details: detailsForPool[i] }, userSeed);
-    if (result) scored.push(result);
-  }
-
-  scored.sort((a, b) => b.score - a.score);
-  const final = scored.slice(0, 20);
-
-  console.log(`   ✅ Personalized recs: ${final.length} titoli`);
-  return final;
+  return final.map(c => ({ ...c, seedTitle }));
 }
 
 async function getCatalog(catalogType, catalogId) {
   console.log(`\n📺 getCatalog: type="${catalogType}" id="${catalogId}"`);
 
-  const parts = catalogId.split('-');
-  const prefix = parts[0];
-  let mediaType = catalogType;
+  // Se è un catalogo di raccomandazioni (rec-movies o rec-series)
+  if (catalogId === 'rec-movies' || catalogId === 'rec-series') {
+    const cacheKey = `${catalogId}`;
+    let cached = cache.get(cacheKey);
+    if (cached) {
+      console.log(`   ✅ Cache hit: ${cached.length} items`);
+      return cached;
+    }
+
+    const language = 'en';
+    const mediaType = catalogId === 'rec-movies' ? 'movie' : 'series';
+    
+    // Ottieni popolari come fallback
+    let items = await tmdb.getPopular(mediaType, language, 2);
+    
+    const metas = items.slice(0, 20).map(item => ({
+      id: `rec_${item.id}`,
+      type: mediaType,
+      name: item.title,
+      poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+      description: `✨ Recommended for you`,
+      releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+      extra: {}
+    }));
+    
+    console.log(`✅ Generati ${metas.length} items per raccomandazioni`);
+    cache.set(cacheKey, metas);
+    return metas;
+  }
+
+  // Parser per "simili a X" - formato: sim-{seedId}-{userUuid}
+  // Oppure: movie-{seedId}-{userUuid}
   let seedId = null;
   let userUuid = null;
-
-  if (prefix === 'sim') {
+  let mediaType = catalogType;
+  
+  if (catalogId.startsWith('sim-')) {
+    const parts = catalogId.split('-');
     seedId = parts[1];
     userUuid = parts.slice(2).join('-');
     mediaType = catalogType;
-  } else if (prefix === 'rec') {
-    userUuid = parts.slice(1).join('-');
-    mediaType = catalogType;
-  } else if (prefix === 'setup') {
-    userUuid = parts.slice(1).join('-');
-    return [{
-      id: 'setup_placeholder',
+  } else if (catalogId.startsWith('movie-')) {
+    const parts = catalogId.split('-');
+    seedId = parts[1];
+    userUuid = parts.slice(2).join('-');
+    mediaType = 'movie';
+  } else if (catalogId.startsWith('series-')) {
+    const parts = catalogId.split('-');
+    seedId = parts[1];
+    userUuid = parts.slice(2).join('-');
+    mediaType = 'series';
+  }
+  
+  if (!seedId) {
+    console.log('   ⚠️ Formato catalogId non riconosciuto, uso popolari');
+    const popular = await tmdb.getPopular(catalogType, 'en', 1);
+    return popular.slice(0, 20).map(item => ({
+      id: `pop_${item.id}`,
       type: catalogType,
-      name: '⚠️ Configure Racconmendations',
-      poster: null,
-      description: 'Open /configure to select your favorites',
-      releaseInfo: '',
+      name: item.title,
+      poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+      description: `Popular ${catalogType}`,
+      releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
       extra: {}
-    }];
+    }));
   }
 
-  if (!userUuid) return [];
-
-  const cacheKey = `${catalogId}:${userUuid}`;
-  const cached = cache.get(cacheKey);
+  const cacheKey = `${catalogId}`;
+  let cached = cache.get(cacheKey);
   if (cached) {
     console.log(`   ✅ Cache hit: ${cached.length} items`);
     return cached;
   }
 
-  const language = await getUserLanguage(userUuid);
-  let items = [];
-
-  if (prefix === 'sim' && seedId) {
-    items = await buildCandidates(mediaType, seedId, language);
-  } else if (prefix === 'rec') {
-    items = await buildPersonalizedRecs(mediaType, userUuid, language);
+  const language = await getUserLanguage(userUuid || 'default');
+  
+  // Ottieni il titolo del seed per mostrarlo nell'etichetta
+  let seedTitle = seedId;
+  if (userUuid) {
+    const config = await getUserConfig(userUuid);
+    if (config) {
+      if (mediaType === 'movie') {
+        const found = (config.selected_movies || []).find(m => m.id === seedId);
+        if (found) seedTitle = found.title;
+      } else {
+        const found = (config.selected_series || []).find(s => s.id === seedId);
+        if (found) seedTitle = found.title;
+      }
+    }
   }
 
+  console.log(`🔍 Cercando simili per: ${seedTitle} (${mediaType})`);
+  
+  const items = await buildCandidates(mediaType, seedId, language, seedTitle);
+  
   if (!items.length) {
-    console.log('   ⚠️ Nessun risultato → fallback popular');
-    items = await tmdb.getPopular(mediaType || catalogType, language, 1);
+    console.log('   ⚠️ Nessun risultato, uso popolari');
+    const popular = await tmdb.getPopular(mediaType, language, 1);
+    const fallbackItems = popular.slice(0, 18).map(item => ({
+      ...item,
+      seedTitle
+    }));
+    
+    const metas = fallbackItems.map(item => ({
+      id: `sim_${seedId}_${item.id}`,
+      type: mediaType,
+      name: item.title,
+      poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+      description: `🎬 Simili a ${seedTitle}`,
+      releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+      extra: {}
+    }));
+    
+    console.log(`✅ Generati ${metas.length} items (fallback)`);
+    cache.set(cacheKey, metas);
+    return metas;
   }
 
   const metas = items.map(item => ({
-    id: `tmdb:${item.id}`,
-    type: mediaType || catalogType,
+    id: `sim_${seedId}_${item.id}`,
+    type: mediaType,
     name: item.title,
     poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-    description: item.overview || '',
+    description: `🎬 Simili a ${item.seedTitle || seedTitle}`,
     releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
     extra: {}
   }));
 
-  console.log(`✅ Generati ${metas.length} items`);
+  console.log(`✅ Generati ${metas.length} items per "${seedTitle}"`);
   cache.set(cacheKey, metas);
   return metas;
 }
