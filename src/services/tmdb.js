@@ -10,6 +10,15 @@ const LANGUAGE_MAP = {
   fr: 'fr-FR'
 };
 
+// Utility interna per normalizzare i tipi Stremio/DB nei tipi TMDB (movie/tv)
+function normalizeMediaType(type) {
+  if (!type) return 'movie';
+  const t = type.toLowerCase();
+  if (t === 'movie') return 'movie';
+  if (t === 'series' || t === 'tv' || t === 'show' || t === 'anime') return 'tv';
+  return 'movie';
+}
+
 function mapItem(item, mediaType) {
   return {
     id: item.id,
@@ -25,8 +34,9 @@ function mapItem(item, mediaType) {
   };
 }
 
-// ─── NUOVO: Converti IMDB ID (tt1234567) → TMDB ID numerico ───────────────────
-async function imdbToTmdb(imdbId, mediaType) {
+// ─── Converti IMDB ID (tt1234567) → TMDB ID numerico ───────────────────
+async function imdbToTmdb(imdbId, type) {
+  const mediaType = normalizeMediaType(type);
   try {
     const res = await axios.get(`${BASE}/find/${imdbId}`, {
       params: {
@@ -39,34 +49,33 @@ async function imdbToTmdb(imdbId, mediaType) {
       : res.data.tv_results;
     return results?.[0]?.id || null;
   } catch (e) {
-    console.error('imdbToTmdb error:', e.message);
+    console.error('❌ imdbToTmdb error:', e.message);
     return null;
   }
 }
 
-// ─── NUOVO: Risolvi ID — accetta sia TMDB numerico che IMDB (tt...) ───────────
-async function resolveId(rawId, mediaType) {
+// ─── Risolvi ID — accetta sia TMDB numerico che IMDB (tt...) ───────────
+async function resolveId(rawId, type) {
   if (!rawId) return null;
   const str = String(rawId);
-  // IMDB format: tt seguito da numeri
+  const mediaType = normalizeMediaType(type);
+  
   if (str.startsWith('tt')) {
-    console.log(`   🔄 Conversione IMDB→TMDB: ${str}`);
+    console.log(`    🔄 Conversione IMDB→TMDB: ${str}`);
     return await imdbToTmdb(str, mediaType);
   }
-  // TMDB format: solo numeri
   const num = parseInt(str, 10);
   return isNaN(num) ? null : num;
 }
 
 // ─── Ottieni dettagli COMPLETI con keywords ───────────────────────────────────
 async function getFullDetails(type, rawId, language = 'en') {
-  const mediaType = type === 'movie' ? 'movie' : 'tv';
+  const mediaType = normalizeMediaType(type);
   const lang = LANGUAGE_MAP[language] || 'en-US';
 
-  // Risolvi l'ID (supporta IMDB)
   const tmdbId = await resolveId(rawId, mediaType);
   if (!tmdbId) {
-    console.error(`getFullDetails: impossibile risolvere ID ${rawId}`);
+    console.error(`❌ getFullDetails: impossibile risolvere ID ${rawId}`);
     return null;
   }
 
@@ -93,9 +102,13 @@ async function getFullDetails(type, rawId, language = 'en') {
       ? data.credits
       : data.aggregate_credits;
 
-    const director = mediaType === 'movie'
-      ? credits?.crew?.find(c => c.job === 'Director')
-      : credits?.crew?.find(c => c.job === 'Creator');
+    // FIX: Nelle serie TV (aggregate_credits) i ruoli sono nidificati dentro l'array 'jobs'
+    let director = null;
+    if (mediaType === 'movie') {
+      director = credits?.crew?.find(c => c.job === 'Director');
+    } else {
+      director = credits?.crew?.find(c => c.jobs && c.jobs.some(j => j.job === 'Director' || j.job === 'Creator'));
+    }
 
     return {
       id: data.id,
@@ -116,14 +129,14 @@ async function getFullDetails(type, rawId, language = 'en') {
       similar: data.similar?.results?.map(i => mapItem(i, mediaType)) || []
     };
   } catch (e) {
-    console.error('getFullDetails error:', e.message);
+    console.error('❌ getFullDetails error:', e.message);
     return null;
   }
 }
 
 // ─── Ottieni dettagli base (per candidati, più leggero) ───────────────────────
 async function getDetails(type, id, language = 'en') {
-  const mediaType = type === 'movie' ? 'movie' : 'tv';
+  const mediaType = normalizeMediaType(type);
   const lang = LANGUAGE_MAP[language] || 'en-US';
   try {
     const res = await axios.get(`${BASE}/${mediaType}/${id}`, {
@@ -153,13 +166,14 @@ async function getDetails(type, id, language = 'en') {
   }
 }
 
-// ─── NUOVO: Batch getDetails in parallelo (max `concurrency` alla volta) ──────
+// ─── Batch getDetails in parallelo (max `concurrency` alla volta) ──────
 async function getDetailsBatch(type, ids, language = 'en', concurrency = 8) {
+  const mediaType = normalizeMediaType(type);
   const results = [];
   for (let i = 0; i < ids.length; i += concurrency) {
     const chunk = ids.slice(i, i + concurrency);
     const settled = await Promise.allSettled(
-      chunk.map(id => getDetails(type, id, language))
+      chunk.map(id => getDetails(mediaType, id, language))
     );
     for (const r of settled) {
       results.push(r.status === 'fulfilled' ? r.value : null);
@@ -169,9 +183,8 @@ async function getDetailsBatch(type, ids, language = 'en', concurrency = 8) {
 }
 
 // ─── Discover con parametri ───────────────────────────────────────────────────
-// BUGFIX: parametro corretto è 'vote_average.gte' con il punto, non underscore
 async function discover(type, params = {}, language = 'en', maxPages = 1) {
-  const mediaType = type === 'movie' ? 'movie' : 'tv';
+  const mediaType = normalizeMediaType(type);
   const lang = LANGUAGE_MAP[language] || 'en-US';
   let all = [];
 
@@ -182,8 +195,8 @@ async function discover(type, params = {}, language = 'en', maxPages = 1) {
           api_key: TMDB_API_KEY,
           language: lang,
           sort_by: 'vote_average.desc',
-          'vote_count.gte': 200,       // ← con il punto (TMDB syntax)
-          'vote_average.gte': 6.0,     // ← con il punto (BUGFIX)
+          'vote_count.gte': 200,
+          'vote_average.gte': 6.0,
           include_adult: false,
           page,
           ...params
@@ -193,7 +206,7 @@ async function discover(type, params = {}, language = 'en', maxPages = 1) {
       all.push(...res.data.results.map(i => mapItem(i, mediaType)));
       if (page >= res.data.total_pages) break;
     } catch (e) {
-      console.error('discover error:', e.message);
+      console.error('❌ discover error:', e.message);
       break;
     }
   }
@@ -202,7 +215,7 @@ async function discover(type, params = {}, language = 'en', maxPages = 1) {
 
 // ─── Popolari — SOLO FALLBACK FINALE ──────────────────────────────────────────
 async function getPopular(type, language = 'en', maxPages = 1) {
-  const mediaType = type === 'movie' ? 'movie' : 'tv';
+  const mediaType = normalizeMediaType(type);
   const lang = LANGUAGE_MAP[language] || 'en-US';
   let all = [];
   for (let page = 1; page <= maxPages; page++) {
@@ -216,6 +229,54 @@ async function getPopular(type, language = 'en', maxPages = 1) {
   return all;
 }
 
+// ─── IMPLEMENTATO: Cerca su TMDB (Standard) ───────────────────────────────────
+async function searchTmdb(query, type, language = 'en') {
+  const mediaType = normalizeMediaType(type);
+  const lang = LANGUAGE_MAP[language] || 'en-US';
+  try {
+    const res = await axios.get(`${BASE}/search/${mediaType}`, {
+      params: {
+        api_key: TMDB_API_KEY,
+        query: query,
+        language: lang,
+        include_adult: false
+      }
+    });
+    return (res.data.results || []).map(i => mapItem(i, mediaType));
+  } catch (e) {
+    console.error('❌ searchTmdb error:', e.message);
+    return [];
+  }
+}
+
+// ─── IMPLEMENTATO: Cerca Anime (Filtro mirato per Animazione Giapponese) ──────
+async function searchAnime(query, language = 'en') {
+  const lang = LANGUAGE_MAP[language] || 'en-US';
+  try {
+    // Cerchiamo l'anime come serie TV
+    const res = await axios.get(`${BASE}/search/tv`, {
+      params: {
+        api_key: TMDB_API_KEY,
+        query: query,
+        language: lang,
+        include_adult: false
+      }
+    });
+    
+    // Filtriamo i risultati: deve avere genere Animation (16) ed essere prodotto in Giappone (JP)
+    const animeResults = (res.data.results || []).filter(item => {
+      const isAnimation = item.genre_ids && item.genre_ids.includes(16);
+      const isJapanese = item.origin_country && item.origin_country.includes('JP');
+      return isAnimation && isJapanese;
+    });
+
+    return animeResults.map(i => mapItem(i, 'tv'));
+  } catch (e) {
+    console.error('❌ searchAnime error:', e.message);
+    return [];
+  }
+}
+
 module.exports = {
   discover,
   getPopular,
@@ -223,5 +284,7 @@ module.exports = {
   getDetails,
   getDetailsBatch,
   resolveId,
+  searchTmdb,
+  searchAnime,
   LANGUAGE_MAP
 };
