@@ -1,37 +1,50 @@
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// Salva configurazione - UPSERT basato su email (se esiste, aggiorna)
+// Salva configurazione - gestisce sia insert che update
 async function saveUserConfig(uuid, data) {
-  // Prima verifica se esiste già un utente con questa email
+  // Prima cerca se esiste già un utente con questa email
   const { data: existing } = await supabase
     .from('user_configs')
     .select('uuid')
     .eq('stremio_email', data.stremioEmail)
     .maybeSingle();
   
-  // Se esiste già, usa quell'UUID (mantieni consistenza)
-  const finalUuid = existing?.uuid || uuid;
+  // Se esiste, usa l'UUID esistente e fai UPDATE
+  if (existing) {
+    const { error } = await supabase
+      .from('user_configs')
+      .update({
+        selected_movies: data.selectedMovies,
+        selected_series: data.selectedSeries,
+        selected_anime: data.selectedAnime,
+        language: data.language || 'en',
+        preferences: data.prefs,
+        updated_at: new Date()
+      })
+      .eq('uuid', existing.uuid);
+    
+    if (error) throw error;
+    return existing.uuid;
+  }
   
-  // UPSERT: se stremio_email esiste, aggiorna; altrimenti inserisci
+  // Se non esiste, fai INSERT
   const { error } = await supabase
     .from('user_configs')
-    .upsert({
-      uuid: finalUuid,
+    .insert({
+      uuid: uuid,
       stremio_email: data.stremioEmail,
       selected_movies: data.selectedMovies,
       selected_series: data.selectedSeries,
       selected_anime: data.selectedAnime,
       language: data.language || 'en',
       preferences: data.prefs,
+      created_at: new Date(),
       updated_at: new Date()
-    }, { 
-      onConflict: 'stremio_email',  // <-- CHIAVE: usa email per il conflitto
-      ignoreDuplicates: false        // <-- false = aggiorna invece di ignorare
     });
   
   if (error) throw error;
-  return finalUuid;
+  return uuid;
 }
 
 async function getUserConfig(uuid) {
