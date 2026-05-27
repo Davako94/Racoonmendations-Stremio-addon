@@ -2,36 +2,44 @@ const { getUserConfig } = require('./services/userStore');
 
 async function getManifest(userUuid) {
   if (!userUuid) {
-    // Manifest base senza UUID (nessun catalogo personale)
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
+      name: "Racconmendations",
+      description: "🎬 Personalized recommendations based on your Stremio library",
+      logo: "https://racconmendations.vercel.app/raccoon-icon.png",
+      background: "https://racconmendations.vercel.app/background.jpg",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [],
-      idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
+      idPrefixes: ["sim_", "rec_", "pop_", "seed_"],
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: true
+      }
     };
   }
   
   try {
-    // Recupera i seed dell'utente dal database
     const config = await getUserConfig(userUuid);
     
     if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
       return {
-        id: "racoonmendations",
+        id: "racconmendations",
         version: "3.0.0",
-        name: "Racoonmendations",
-        description: "Configure your addon first at /configure",
+        name: "Racconmendations",
+        description: "⚙️ Configure your addon first at /configure",
+        logo: "https://racconmendations.vercel.app/raccoon-icon.png",
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [
-          { type: "movie", id: `setup-movie-${userUuid}`, name: "⚙️ Configure Racoonmendations" },
-          { type: "series", id: `setup-series-${userUuid}`, name: "⚙️ Configure Racoonmendations" }
+          { type: "movie", id: `setup-${userUuid}`, name: "⚙️ Configure Racconmendations" }
         ],
-        idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
+        idPrefixes: ["sim_", "rec_", "pop_", "seed_"],
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: true
+        }
       };
     }
     
@@ -54,62 +62,57 @@ async function getManifest(userUuid) {
     }
     const randomSeries = shuffledSeries.slice(0, 5);
     
-    // Costruisci la lista dei cataloghi
     const catalogs = [];
     
-    // Cataloghi per film
     for (const movie of randomMovies) {
       if (movie.id && movie.title) {
         catalogs.push({
           type: "movie",
-          id: `sim-movie-${movie.id}-${userUuid}`,
-          name: `🎬 Simili a ${movie.title}`
+          id: `sim-${movie.id}-${userUuid}`,
+          name: `🎬 ${movie.title}`
         });
       }
     }
     
-    // Cataloghi per serie
     for (const series of randomSeries) {
       if (series.id && series.title) {
         catalogs.push({
           type: "series",
-          id: `sim-series-${series.id}-${userUuid}`,
-          name: `📺 Simili a ${series.title}`
+          id: `sim-${series.id}-${userUuid}`,
+          name: `📺 ${series.title}`
         });
       }
     }
     
-    // Catalogo "Potrebbero piacerti anche" per film
+    // Catalogo "Potrebbero piacerti anche"
     catalogs.push({
       type: "movie",
-      id: `rec-movies-${userUuid}`,
-      name: "✨ Potrebbero piacerti anche"
-    });
-    
-    // Catalogo "Potrebbero piacerti anche" per serie
-    catalogs.push({
-      type: "series",
-      id: `rec-series-${userUuid}`,
-      name: "✨ Potrebbero piacerti anche"
+      id: `rec-${userUuid}`,
+      name: "✨ Ti potrebbe piacere"
     });
     
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
+      name: "Racconmendations",
+      description: "🎬 Personalized recommendations based on your Stremio library",
+      logo: "https://racconmendations.vercel.app/raccoon-icon.png",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: catalogs,
-      idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
+      idPrefixes: ["sim_", "rec_", "pop_", "seed_"],
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: false
+      }
     };
     
   } catch (error) {
     console.error('Error generating manifest:', error);
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
+      name: "Racconmendations",
       description: "Error loading recommendations",
       resources: ["catalog"],
       types: ["movie", "series"],
