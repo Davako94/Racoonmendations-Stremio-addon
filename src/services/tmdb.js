@@ -20,16 +20,55 @@ function mapItem(item, mediaType) {
     vote_average: item.vote_average,
     popularity: item.popularity,
     genre_ids: item.genre_ids || [],
-    keyword_ids: item.keyword_ids || [],  // IMPORTANTE per matching
     release_date: item.release_date || item.first_air_date,
     media_type: mediaType
   };
 }
 
-// Ottieni dettagli COMPLETI con keywords
-async function getFullDetails(type, tmdbId, language = 'en') {
+// ─── NUOVO: Converti IMDB ID (tt1234567) → TMDB ID numerico ───────────────────
+async function imdbToTmdb(imdbId, mediaType) {
+  try {
+    const res = await axios.get(`${BASE}/find/${imdbId}`, {
+      params: {
+        api_key: TMDB_API_KEY,
+        external_source: 'imdb_id'
+      }
+    });
+    const results = mediaType === 'movie'
+      ? res.data.movie_results
+      : res.data.tv_results;
+    return results?.[0]?.id || null;
+  } catch (e) {
+    console.error('imdbToTmdb error:', e.message);
+    return null;
+  }
+}
+
+// ─── NUOVO: Risolvi ID — accetta sia TMDB numerico che IMDB (tt...) ───────────
+async function resolveId(rawId, mediaType) {
+  if (!rawId) return null;
+  const str = String(rawId);
+  // IMDB format: tt seguito da numeri
+  if (str.startsWith('tt')) {
+    console.log(`   🔄 Conversione IMDB→TMDB: ${str}`);
+    return await imdbToTmdb(str, mediaType);
+  }
+  // TMDB format: solo numeri
+  const num = parseInt(str, 10);
+  return isNaN(num) ? null : num;
+}
+
+// ─── Ottieni dettagli COMPLETI con keywords ───────────────────────────────────
+async function getFullDetails(type, rawId, language = 'en') {
   const mediaType = type === 'movie' ? 'movie' : 'tv';
   const lang = LANGUAGE_MAP[language] || 'en-US';
+
+  // Risolvi l'ID (supporta IMDB)
+  const tmdbId = await resolveId(rawId, mediaType);
+  if (!tmdbId) {
+    console.error(`getFullDetails: impossibile risolvere ID ${rawId}`);
+    return null;
+  }
 
   try {
     const append = mediaType === 'movie'
@@ -72,6 +111,7 @@ async function getFullDetails(type, tmdbId, language = 'en') {
       creatorIds: (data.created_by || []).map(c => c.id),
       cast: (credits?.cast || []).slice(0, 10),
       director,
+      vote_average: data.vote_average,
       recommendations: data.recommendations?.results?.map(i => mapItem(i, mediaType)) || [],
       similar: data.similar?.results?.map(i => mapItem(i, mediaType)) || []
     };
@@ -81,7 +121,7 @@ async function getFullDetails(type, tmdbId, language = 'en') {
   }
 }
 
-// Ottieni dettagli base (per candidati, più leggero)
+// ─── Ottieni dettagli base (per candidati, più leggero) ───────────────────────
 async function getDetails(type, id, language = 'en') {
   const mediaType = type === 'movie' ? 'movie' : 'tv';
   const lang = LANGUAGE_MAP[language] || 'en-US';
@@ -97,7 +137,7 @@ async function getDetails(type, id, language = 'en') {
     const keywords = mediaType === 'movie'
       ? (data.keywords?.keywords || [])
       : (data.keywords?.results || []);
-    
+
     return {
       id: data.id,
       title: data.title || data.name,
@@ -113,7 +153,23 @@ async function getDetails(type, id, language = 'en') {
   }
 }
 
-// Discover con parametri
+// ─── NUOVO: Batch getDetails in parallelo (max `concurrency` alla volta) ──────
+async function getDetailsBatch(type, ids, language = 'en', concurrency = 8) {
+  const results = [];
+  for (let i = 0; i < ids.length; i += concurrency) {
+    const chunk = ids.slice(i, i + concurrency);
+    const settled = await Promise.allSettled(
+      chunk.map(id => getDetails(type, id, language))
+    );
+    for (const r of settled) {
+      results.push(r.status === 'fulfilled' ? r.value : null);
+    }
+  }
+  return results;
+}
+
+// ─── Discover con parametri ───────────────────────────────────────────────────
+// BUGFIX: parametro corretto è 'vote_average.gte' con il punto, non underscore
 async function discover(type, params = {}, language = 'en', maxPages = 1) {
   const mediaType = type === 'movie' ? 'movie' : 'tv';
   const lang = LANGUAGE_MAP[language] || 'en-US';
@@ -126,7 +182,8 @@ async function discover(type, params = {}, language = 'en', maxPages = 1) {
           api_key: TMDB_API_KEY,
           language: lang,
           sort_by: 'vote_average.desc',
-          'vote_count.gte': 200,
+          'vote_count.gte': 200,       // ← con il punto (TMDB syntax)
+          'vote_average.gte': 6.0,     // ← con il punto (BUGFIX)
           include_adult: false,
           page,
           ...params
@@ -135,12 +192,15 @@ async function discover(type, params = {}, language = 'en', maxPages = 1) {
       if (!res.data.results?.length) break;
       all.push(...res.data.results.map(i => mapItem(i, mediaType)));
       if (page >= res.data.total_pages) break;
-    } catch (e) { break; }
+    } catch (e) {
+      console.error('discover error:', e.message);
+      break;
+    }
   }
   return all;
 }
 
-// Popolari - SOLO FALLBACK FINALE
+// ─── Popolari — SOLO FALLBACK FINALE ──────────────────────────────────────────
 async function getPopular(type, language = 'en', maxPages = 1) {
   const mediaType = type === 'movie' ? 'movie' : 'tv';
   const lang = LANGUAGE_MAP[language] || 'en-US';
@@ -161,5 +221,7 @@ module.exports = {
   getPopular,
   getFullDetails,
   getDetails,
+  getDetailsBatch,
+  resolveId,
   LANGUAGE_MAP
 };
