@@ -13,11 +13,32 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
-app.get('/manifest.json', (req, res) => {
+// ============================================================
+// MANIFEST - DINAMICO (ASYNC)
+// ============================================================
+app.get('/manifest.json', async (req, res) => {
   const userUuid = req.query.uuid;
-  res.json(getManifest(userUuid));
+  try {
+    const manifest = await getManifest(userUuid);
+    res.json(manifest);
+  } catch (err) {
+    console.error('❌ Manifest error:', err);
+    res.status(500).json({ 
+      id: "racoonmendations",
+      version: "3.0.0",
+      name: "Racoonmendations",
+      description: "Error loading manifest",
+      resources: ["catalog"],
+      types: ["movie", "series"],
+      catalogs: [],
+      idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
+    });
+  }
 });
 
+// ============================================================
+// CATALOGO
+// ============================================================
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   const { type, catalogId } = req.params;
   if (!['movie', 'series'].includes(type)) {
@@ -32,10 +53,16 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   }
 });
 
+// ============================================================
+// CONFIG PAGE
+// ============================================================
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'src/public/configure.html'));
 });
 
+// ============================================================
+// PROXY PER IMMAGINI TMDB
+// ============================================================
 app.get('/api/poster', async (req, res) => {
   const { path: imagePath, size = 'w185' } = req.query;
   if (!imagePath) {
@@ -59,6 +86,9 @@ app.get('/api/poster', async (req, res) => {
   }
 });
 
+// ============================================================
+// API: LOGIN STREMIO
+// ============================================================
 app.post('/api/stremio/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -139,6 +169,9 @@ app.post('/api/stremio/login', async (req, res) => {
   }
 });
 
+// ============================================================
+// API: SALVA CONFIGURAZIONE UTENTE
+// ============================================================
 app.post('/api/save-config', async (req, res) => {
   const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
   
@@ -166,6 +199,9 @@ app.post('/api/save-config', async (req, res) => {
   }
 });
 
+// ============================================================
+// API: RICERCA TMDB
+// ============================================================
 app.get('/api/search', async (req, res) => {
   const { q, type, language = 'en' } = req.query;
   
@@ -187,6 +223,9 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// ============================================================
+// API: LINGUE SUPPORTATE
+// ============================================================
 app.get('/api/languages', (req, res) => {
   res.json([
     { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -197,6 +236,9 @@ app.get('/api/languages', (req, res) => {
   ]);
 });
 
+// ============================================================
+// API: INVALIDA CACHE
+// ============================================================
 app.post('/api/invalidate/:userUuid', (req, res) => {
   const { userUuid } = req.params;
   catalogHandler.invalidateCache(userUuid);
@@ -204,6 +246,9 @@ app.post('/api/invalidate/:userUuid', (req, res) => {
   res.json({ ok: true });
 });
 
+// ============================================================
+// API: STATISTICHE UTENTE
+// ============================================================
 app.get('/api/user-stats/:userUuid', async (req, res) => {
   const { userUuid } = req.params;
   try {
@@ -227,6 +272,30 @@ app.get('/api/user-stats/:userUuid', async (req, res) => {
   }
 });
 
+// ============================================================
+// DEBUG: VERIFICA SEED SALVATI
+// ============================================================
+app.get('/api/debug-seeds/:userUuid', async (req, res) => {
+  const { userUuid } = req.params;
+  try {
+    const config = await getUserConfig(userUuid);
+    res.json({
+      success: true,
+      hasConfig: !!config,
+      moviesCount: config?.selected_movies?.length || 0,
+      seriesCount: config?.selected_series?.length || 0,
+      movies: config?.selected_movies?.slice(0, 5).map(m => ({ id: m.id, title: m.title })),
+      series: config?.selected_series?.slice(0, 5).map(s => ({ id: s.id, title: s.title })),
+      language: config?.language || 'en'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================
+// HEALTH CHECK
+// ============================================================
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -236,6 +305,9 @@ app.get('/health', (req, res) => {
   });
 });
 
+// ============================================================
+// AVVIO SERVER
+// ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🦝 Racoonmendations addon running on port ${PORT}`);
