@@ -1,18 +1,17 @@
 function getManifest(userUuid = null) {
-  // I cataloghi ora saranno generati dinamicamente in base ai seed
-  // Per ora restituiamo un manifesto base, i cataloghi verranno creati al volo
   return {
-    id: "stremio-rec-addon",
+    id: "racoonmendations",
     version: "3.0.0",
-    name: "Smart Recommendations",
-    description: "Personalized recommendations based on your favorite movies and series",
+    name: "Racoonmendations",
+    description: "Personalized movie & series recommendations by Raccoon - based on your Stremio library",
     resources: ["catalog"],
     types: ["movie", "series"],
     catalogs: [
-      { type: "movie", id: `recommended-${userUuid || 'default'}`, name: "🎬 Recommended for You" },
-      { type: "series", id: `recommended-${userUuid || 'default'}`, name: "📺 Recommended Series" }
+      { type: "movie", id: `racoon-movies-${userUuid || 'default'}`, name: "🎬 Racoonmendations Movies" },
+      { type: "series", id: `racoon-series-${userUuid || 'default'}`, name: "📺 Racoonmendations Series" }
     ],
-    idPrefixes: ["rec_", "sim_"]
+    idPrefixes: ["racoon_", "sim_", "rand_"],
+    logo: "https://raw.githubusercontent.com/yourusername/stremio-rec-addon/main/racoon-icon.png"
   };
 }
 
