@@ -4,41 +4,98 @@ const { getUserConfig, getUserLanguage } = require('../services/userStore');
 
 const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
 
-// Parole chiave per espandere la ricerca in base al genere/titolo
-function extractKeywords(title) {
-  const keywords = [];
-  const lower = title.toLowerCase();
+// Calcola similarità tra due set di generi
+function genreOverlap(seedGenres, itemGenres) {
+  const seedIds = new Set(seedGenres.map(g => g.id));
+  const overlap = itemGenres.filter(g => seedIds.has(g.id)).length;
+  return overlap;
+}
+
+// Calcola similarità keyword (più pesante)
+function keywordOverlap(seedKeywords, itemKeywords) {
+  const seedKeywordNames = new Set(seedKeywords.map(k => k.name.toLowerCase()));
+  const overlap = itemKeywords.filter(k => seedKeywordNames.has(k.name.toLowerCase())).length;
+  return overlap;
+}
+
+// Calcola overlap cast
+function castOverlap(seedCast, itemCast) {
+  const seedCastIds = new Set(seedCast.map(c => c.id));
+  const overlap = itemCast.filter(c => seedCastIds.has(c.id)).length;
+  return overlap;
+}
+
+// Calcola overlap production companies
+function companyOverlap(seedCompanies, itemCompanies) {
+  const seedCompanyIds = new Set(seedCompanies.map(c => c.id));
+  const overlap = itemCompanies.filter(c => seedCompanyIds.has(c.id)).length;
+  return overlap;
+}
+
+// Calcola overlap directors
+function directorOverlap(seedDirectors, itemDirectors) {
+  const seedDirectorIds = new Set(seedDirectors.map(d => d.id));
+  const overlap = itemDirectors.filter(d => seedDirectorIds.has(d.id)).length;
+  return overlap;
+}
+
+// Calcola overlap networks/creators (per serie TV)
+function networkOverlap(seedNetworks, itemNetworks) {
+  const seedNetworkIds = new Set(seedNetworks.map(n => n.id));
+  const overlap = itemNetworks.filter(n => seedNetworkIds.has(n.id)).length;
+  return overlap;
+}
+
+function creatorOverlap(seedCreators, itemCreators) {
+  const seedCreatorIds = new Set(seedCreators.map(c => c.id));
+  const overlap = itemCreators.filter(c => seedCreatorIds.has(c.id)).length;
+  return overlap;
+}
+
+// Scoring engine principale
+function calculateScore(seedDetails, itemDetails) {
+  let score = 0;
   
-  if (lower.includes('marvel') || lower.includes('avenger') || lower.includes('iron man') || lower.includes('captain america')) {
-    keywords.push('superhero', 'marvel', 'action');
-  }
-  if (lower.includes('cars') || lower.includes('auto') || lower.includes('race')) {
-    keywords.push('cars', 'racing', 'animation', 'family');
-  }
-  if (lower.includes('disney') || lower.includes('pixar')) {
-    keywords.push('animation', 'family', 'disney');
-  }
-  if (lower.includes('star wars')) {
-    keywords.push('space', 'scifi', 'adventure');
-  }
-  if (lower.includes('jurassic')) {
-    keywords.push('dinosaurs', 'adventure', 'action');
-  }
-  if (lower.includes('harry potter')) {
-    keywords.push('fantasy', 'magic', 'wizard');
-  }
-  if (lower.includes('fast') || lower.includes('furious')) {
-    keywords.push('cars', 'action', 'heist');
-  }
+  // KEYWORD overlap - PESO 30 (più importante)
+  const kwOverlap = keywordOverlap(seedDetails.keywords || [], itemDetails.keywords || []);
+  score += kwOverlap * 30;
   
-  // Aggiungi sempre qualche keyword generica per varietà
-  keywords.push('popular', 'trending');
+  // GENRE overlap - PESO 15
+  const genreOverlapCount = genreOverlap(seedDetails.genres || [], itemDetails.genres || []);
+  score += genreOverlapCount * 15;
   
-  return keywords;
+  // STUDIO (production companies) - PESO 35 (molto importante per franchise)
+  const companyOverlapCount = companyOverlap(seedDetails.production_companies || [], itemDetails.production_companies || []);
+  score += companyOverlapCount * 35;
+  
+  // DIRECTOR - PESO 50 (altissimo per film)
+  const directorOverlapCount = directorOverlap(seedDetails.director || [], itemDetails.director || []);
+  score += directorOverlapCount * 50;
+  
+  // NETWORK (per serie TV) - PESO 25
+  const networkOverlapCount = networkOverlap(seedDetails.networks || [], itemDetails.networks || []);
+  score += networkOverlapCount * 25;
+  
+  // CREATOR (per serie TV) - PESO 45
+  const creatorOverlapCount = creatorOverlap(seedDetails.creators || [], itemDetails.creators || []);
+  score += creatorOverlapCount * 45;
+  
+  // CAST overlap - PESO 10
+  const castOverlapCount = castOverlap(seedDetails.cast || [], itemDetails.cast || []);
+  score += castOverlapCount * 10;
+  
+  // Voto bonus: +5 se voto > 7, +10 se voto > 8
+  if (itemDetails.vote_average >= 8) score += 10;
+  else if (itemDetails.vote_average >= 7) score += 5;
+  
+  // Tiny random noise per evitare pareggi perfetti (max 5 punti)
+  score += Math.random() * 5;
+  
+  return score;
 }
 
 async function getCatalog(catalogType, catalogId) {
-  console.log(`📺 getCatalog: type=${catalogType}, catalogId=${catalogId}`);
+  console.log(`📺 getCatalog: ${catalogId}`);
   
   const parts = catalogId.split('-');
   const prefix = parts[0];
@@ -64,199 +121,227 @@ async function getCatalog(catalogType, catalogId) {
     }];
   }
   
-  if (!userUuid) {
-    console.error('❌ No UUID found');
-    return [];
-  }
+  if (!userUuid) return [];
   
   const cacheKey = `${catalogId}:${userUuid}`;
   let cached = cache.get(cacheKey);
-  if (cached) {
-    console.log(`📦 Cache hit: ${cached.length} items`);
-    return cached;
-  }
+  if (cached) return cached;
   
   const language = await getUserLanguage(userUuid);
   let metas = [];
   
   if (prefix === 'sim' && seedId) {
-    console.log(`🎯 Simili a: seedId=${seedId}, type=${mediaType}`);
+    console.log(`🎯 Scoring similar for: ${seedId}`);
     
-    const config = await getUserConfig(userUuid);
-    let seedTitle = '';
-    let seedGenres = [];
+    // STEP 1: Ottieni dettagli COMPLETI del seed
+    const seedDetails = await tmdb.getFullDetails(mediaType, seedId, language);
+    if (!seedDetails) return [];
     
-    if (mediaType === 'movie') {
-      const found = (config.selected_movies || []).find(m => m.id === seedId);
-      seedTitle = found?.title || seedId;
-      seedGenres = found?.genres || [];
-    } else {
-      const found = (config.selected_series || []).find(s => s.id === seedId);
-      seedTitle = found?.title || seedId;
-      seedGenres = found?.genres || [];
-    }
+    console.log(`   Seed: ${seedDetails.title}`);
+    console.log(`   Genres: ${seedDetails.genres.map(g => g.name).join(', ')}`);
+    console.log(`   Keywords: ${seedDetails.keywords.slice(0,5).map(k => k.name).join(', ')}`);
+    console.log(`   Director: ${seedDetails.director.map(d => d.name).join(', ')}`);
+    console.log(`   Studio: ${seedDetails.production_companies.slice(0,3).map(c => c.name).join(', ')}`);
     
-    // Se non abbiamo generi, recuperali da TMDB
-    if (!seedGenres || seedGenres.length === 0) {
-      const details = await tmdb.getDetails(mediaType, seedId, language);
-      if (details && details.genres) {
-        seedGenres = details.genres;
+    // STEP 2: Raccogli candidati da multiple fonti
+    const candidateIds = new Set();
+    const candidates = [];
+    
+    // Fonte 1: Recommendations diretti
+    for (const rec of seedDetails.recommendations) {
+      if (!candidateIds.has(rec.id)) {
+        candidateIds.add(rec.id);
+        candidates.push({ id: rec.id, title: rec.title || rec.name, source: 'recommendations' });
       }
     }
     
-    const genreIds = seedGenres.map(g => g.id).filter(Boolean);
-    const keywords = extractKeywords(seedTitle);
-    
-    let allItems = [];
-    
-    // STRATEGIA 1: Recommendations (più pagine)
-    const recs = await tmdb.getRecommendations(mediaType, seedId, language, 3);
-    allItems.push(...recs);
-    console.log(`   📌 Recommendations: ${recs.length}`);
-    
-    // STRATEGIA 2: Similar (più pagine)
-    const similar = await tmdb.getSimilar(mediaType, seedId, language, 3);
-    allItems.push(...similar);
-    console.log(`   📌 Similar: ${similar.length}`);
-    
-    // STRATEGIA 3: Discover per genere (se abbiamo generi)
-    if (genreIds.length > 0) {
-      for (const genreId of genreIds.slice(0, 2)) {
-        const byGenre = await tmdb.discover(mediaType, { with_genres: genreId }, language, 2);
-        allItems.push(...byGenre);
-        console.log(`   📌 Genre ${genreId}: ${byGenre.length}`);
+    // Fonte 2: Similar
+    for (const sim of seedDetails.similar) {
+      if (!candidateIds.has(sim.id)) {
+        candidateIds.add(sim.id);
+        candidates.push({ id: sim.id, title: sim.title || sim.name, source: 'similar' });
       }
     }
     
-    // STRATEGIA 4: Discover combinato (genere + anno, per varietà)
-    const currentYear = new Date().getFullYear();
-    const discoverVariants = [
-      { with_genres: genreIds.join('|'), 'vote_average.gte': 6 },
-      { with_genres: genreIds.join('|'), 'vote_average.gte': 7, 'vote_count.gte': 500 },
-      { with_genres: genreIds.join('|'), 'primary_release_date.gte': `${currentYear - 5}-01-01` },
-      { sort_by: 'vote_average.desc', 'vote_count.gte': 1000, with_genres: genreIds.join('|') }
-    ];
-    
-    for (const params of discoverVariants.slice(0, 3)) {
-      const discovered = await tmdb.discover(mediaType, params, language, 1);
-      allItems.push(...discovered);
-      console.log(`   📌 Discover variant: ${discovered.length}`);
-    }
-    
-    // STRATEGIA 5: Cerca per keyword
-    for (const keyword of keywords.slice(0, 3)) {
-      const byKeyword = await tmdb.searchByKeyword(mediaType, keyword, language, 1);
-      allItems.push(...byKeyword);
-      console.log(`   📌 Keyword "${keyword}": ${byKeyword.length}`);
-    }
-    
-    // STRATEGIA 6: Popolari come fallback
-    const popular = await tmdb.getPopular(mediaType, language, 2);
-    allItems.push(...popular);
-    console.log(`   📌 Popular: ${popular.length}`);
-    
-    // Deduplica e mescola
-    const unique = new Map();
-    for (const item of allItems) {
-      if (item.id && item.id !== seedId && !unique.has(item.id)) {
-        unique.set(item.id, item);
+    // Fonte 3: Discover per genere (se abbiamo generi)
+    if (seedDetails.genres.length > 0) {
+      const genreIds = seedDetails.genres.map(g => g.id).join(',');
+      const byGenre = await tmdb.discover(mediaType, { with_genres: genreIds, 'vote_average.gte': 6 }, language, 2);
+      for (const item of byGenre) {
+        if (!candidateIds.has(item.id) && item.id !== seedId) {
+          candidateIds.add(item.id);
+          candidates.push({ id: item.id, title: item.title, source: 'discover_genre' });
+        }
       }
     }
     
-    let items = Array.from(unique.values());
-    // Mescola casualmente
-    for (let i = items.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [items[i], items[j]] = [items[j], items[i]];
+    // Fonte 4: Discover per keyword (se abbiamo keyword TMDB)
+    if (seedDetails.keywords.length > 0) {
+      const keywordIds = seedDetails.keywords.slice(0, 5).map(k => k.id).join(',');
+      const byKeyword = await tmdb.discover(mediaType, { with_keywords: keywordIds }, language, 1);
+      for (const item of byKeyword) {
+        if (!candidateIds.has(item.id) && item.id !== seedId) {
+          candidateIds.add(item.id);
+          candidates.push({ id: item.id, title: item.title, source: 'discover_keyword' });
+        }
+      }
     }
     
-    // Prendi i primi 50
-    items = items.slice(0, 50);
+    // Fonte 5: Discover per studio (se abbiamo production companies)
+    if (seedDetails.production_companies.length > 0) {
+      const companyIds = seedDetails.production_companies.slice(0, 3).map(c => c.id).join(',');
+      const byCompany = await tmdb.discover(mediaType, { with_companies: companyIds }, language, 1);
+      for (const item of byCompany) {
+        if (!candidateIds.has(item.id) && item.id !== seedId) {
+          candidateIds.add(item.id);
+          candidates.push({ id: item.id, title: item.title, source: 'discover_company' });
+        }
+      }
+    }
     
-    metas = items.map(item => ({
+    // Fonte 6: Discover per regista (se abbiamo director)
+    if (seedDetails.director.length > 0) {
+      const directorIds = seedDetails.director.map(d => d.id).join(',');
+      const byDirector = await tmdb.discover(mediaType, { with_people: directorIds }, language, 1);
+      for (const item of byDirector) {
+        if (!candidateIds.has(item.id) && item.id !== seedId) {
+          candidateIds.add(item.id);
+          candidates.push({ id: item.id, title: item.title, source: 'discover_director' });
+        }
+      }
+    }
+    
+    console.log(`   Candidati raccolti: ${candidates.length}`);
+    
+    // STEP 3: Scoring per ogni candidato
+    const scoredItems = [];
+    for (const candidate of candidates.slice(0, 150)) { // Max 150 per performance
+      const itemDetails = await tmdb.getFullDetails(mediaType, candidate.id, language);
+      if (itemDetails) {
+        const score = calculateScore(seedDetails, itemDetails);
+        scoredItems.push({
+          ...candidate,
+          details: itemDetails,
+          score: score
+        });
+      }
+    }
+    
+    // STEP 4: Ordina per score (decrescente)
+    scoredItems.sort((a, b) => b.score - a.score);
+    
+    // STEP 5: Diversificazione intelligente
+    const finalItems = [];
+    const studioCount = new Map();
+    const franchiseCount = new Map();
+    
+    for (const item of scoredItems) {
+      // Limite per studio (max 3 per studio)
+      const studioName = item.details.production_companies[0]?.name;
+      if (studioName) {
+        if (studioCount.get(studioName) >= 3) continue;
+        studioCount.set(studioName, (studioCount.get(studioName) || 0) + 1);
+      }
+      
+      // Limite per franchise (basato su keyword comuni - max 2)
+      const franchiseKeyword = item.details.keywords.find(k => 
+        seedDetails.keywords.some(sk => sk.name === k.name && sk.name.includes('franchise'))
+      );
+      if (franchiseKeyword) {
+        if (franchiseCount.get(franchiseKeyword.name) >= 2) continue;
+        franchiseCount.set(franchiseKeyword.name, (franchiseCount.get(franchiseKeyword.name) || 0) + 1);
+      }
+      
+      finalItems.push(item);
+      if (finalItems.length >= 50) break;
+    }
+    
+    console.log(`   Finali dopo diversificazione: ${finalItems.length}`);
+    
+    // STEP 6: Costruisci metas
+    metas = finalItems.map(item => ({
       id: `sim_${seedId}_${item.id}`,
       type: mediaType,
-      name: item.title,
-      poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-      description: item.overview || `Similar to ${seedTitle}`,
-      releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+      name: item.details.title,
+      poster: item.details.poster_path ? `https://image.tmdb.org/t/p/w342${item.details.poster_path}` : null,
+      description: item.details.overview || `Similar to ${seedDetails.title} (score: ${Math.round(item.score)})`,
+      releaseInfo: item.details.release_date ? item.details.release_date.split('-')[0] : '',
       extra: {}
     }));
     
-    console.log(`   ✅ Totale ${metas.length} simili unici per ${seedTitle} (da ${allItems.length} raw)`);
-    
   } else if (prefix === 'rec') {
-    console.log(`✨ Raccomandazioni per ${mediaType}`);
+    console.log(`✨ Recommendations for ${mediaType}`);
     
     const config = await getUserConfig(userUuid);
     const seeds = mediaType === 'movie' 
       ? (config.selected_movies || [])
       : (config.selected_series || []);
     
-    let allRecs = [];
+    let allCandidates = [];
+    const seenIds = new Set();
     
     for (const seed of seeds.slice(0, 10)) {
       const seedId = seed.tmdb_id || seed.id;
       if (seedId) {
-        const recs = await tmdb.getRecommendations(mediaType, seedId, language, 2);
-        const similar = await tmdb.getSimilar(mediaType, seedId, language, 2);
-        allRecs.push(...recs, ...similar);
+        const seedDetails = await tmdb.getFullDetails(mediaType, seedId, language);
+        if (seedDetails) {
+          // Prendi recommendations e similar
+          for (const rec of seedDetails.recommendations) {
+            if (!seenIds.has(rec.id)) {
+              seenIds.add(rec.id);
+              allCandidates.push({ id: rec.id, title: rec.title || rec.name, seedScore: 1 });
+            }
+          }
+          for (const sim of seedDetails.similar) {
+            if (!seenIds.has(sim.id)) {
+              seenIds.add(sim.id);
+              allCandidates.push({ id: sim.id, title: sim.title || sim.name, seedScore: 0.8 });
+            }
+          }
+        }
       }
     }
     
-    // Aggiungi popolari
-    const popular = await tmdb.getPopular(mediaType, language, 3);
-    allRecs.push(...popular);
-    
-    // Deduplica e mescola
-    const unique = new Map();
-    for (const rec of allRecs) {
-      if (!unique.has(rec.id)) {
-        unique.set(rec.id, rec);
+    // Scoring per raccomandazioni
+    const scoredRecs = [];
+    for (const candidate of allCandidates.slice(0, 100)) {
+      const itemDetails = await tmdb.getFullDetails(mediaType, candidate.id, language);
+      if (itemDetails && itemDetails.vote_average > 5) {
+        let score = itemDetails.vote_average * 10 + candidate.seedScore * 20;
+        score += Math.random() * 5;
+        scoredRecs.push({ details: itemDetails, score });
       }
     }
     
-    let items = Array.from(unique.values());
-    for (let i = items.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [items[i], items[j]] = [items[j], items[i]];
-    }
+    scoredRecs.sort((a, b) => b.score - a.score);
     
-    items = items.slice(0, 50);
-    
-    metas = items.map(item => ({
-      id: `rec_${item.id}`,
+    metas = scoredRecs.slice(0, 50).map(item => ({
+      id: `rec_${item.details.id}`,
       type: mediaType,
+      name: item.details.title,
+      poster: item.details.poster_path ? `https://image.tmdb.org/t/p/w342${item.details.poster_path}` : null,
+      description: item.details.overview || `Recommended for you`,
+      releaseInfo: item.details.release_date ? item.details.release_date.split('-')[0] : '',
+      extra: {}
+    }));
+  }
+  
+  // Fallback finale
+  if (metas.length === 0) {
+    console.log(`⚠️ Fallback a popolari`);
+    const popular = await tmdb.getPopular(mediaType || catalogType, language, 2);
+    metas = popular.slice(0, 50).map(item => ({
+      id: `pop_${item.id}`,
+      type: mediaType || catalogType,
       name: item.title,
       poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-      description: item.overview || `Potrebbe piacerti`,
+      description: `Popular ${mediaType || catalogType}`,
       releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
       extra: {}
     }));
-    
-    console.log(`   ✅ Trovate ${metas.length} raccomandazioni`);
   }
   
-  if (metas.length === 0) {
-    console.log(`⚠️ Fallback a popolari`);
-    try {
-      const popular = await tmdb.getPopular(mediaType || catalogType, language, 3);
-      metas = popular.slice(0, 50).map(item => ({
-        id: `pop_${item.id}`,
-        type: mediaType || catalogType,
-        name: item.title,
-        poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-        description: item.overview || `Popolare`,
-        releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
-        extra: {}
-      }));
-    } catch (err) {
-      console.error('Error fetching popular:', err.message);
-    }
-  }
-  
-  console.log(`✅ Generati ${metas.length} items per ${catalogId}`);
-  
+  console.log(`✅ Generati ${metas.length} items`);
   cache.set(cacheKey, metas);
   return metas;
 }
@@ -265,7 +350,7 @@ function invalidateCache(userUuid) {
   const keys = cache.keys().filter(k => k.includes(userUuid));
   if (keys.length) {
     cache.del(keys);
-    console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} keys`);
+    console.log(`🗑️ Cache invalidata per ${userUuid}`);
   }
 }
 
