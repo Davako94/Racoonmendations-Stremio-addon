@@ -24,9 +24,9 @@ app.get('/manifest.json', async (req, res) => {
   } catch (err) {
     console.error('❌ Manifest error:', err);
     res.status(500).json({ 
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
+      name: "Racconmendations",
       description: "Error loading manifest",
       resources: ["catalog"],
       types: ["movie", "series"],
@@ -300,7 +300,7 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    addon: 'racoonmendations',
+    addon: 'racconmendations',
     version: '3.0.0'
   });
 });
@@ -310,7 +310,7 @@ app.get('/health', (req, res) => {
 // ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`🦝 Racoonmendations addon running on port ${PORT}`);
+  console.log(`🦝 Racconmendations addon running on port ${PORT}`);
   console.log(`📋 Configure page: http://localhost:${PORT}/configure`);
   console.log(`📄 Manifest: http://localhost:${PORT}/manifest.json`);
 });
