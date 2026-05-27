@@ -21,55 +21,62 @@ function scoreCandidate(candidate, seed) {
   
   const isFromPrimary = candidate._source === 'recommendation' || candidate._source === 'similar';
   
-  // HARD FILTER: senza keyword o genre, solo recommendation/similar passano
   if (!isFromPrimary && keywordOverlap === 0 && genreOverlap === 0) return null;
   
   let score = candidate._scoreBonus || 0;
   
-  // Pesi principali
-  score += keywordOverlap * 50;      // Keyword sono il segnale più forte
-  score += creatorOverlap * 45;      // Stesso creatore/showrunner
-  score += companyOverlap * 40;      // Stessa casa di produzione (es. Pixar)
-  score += networkOverlap * 35;      // Stessa rete (es. HBO, Netflix)
-  score += genreOverlap   * 15;      // Generi (peso minore)
+  score += keywordOverlap * 50;
+  score += creatorOverlap * 45;
+  score += companyOverlap * 40;
+  score += networkOverlap * 35;
+  score += genreOverlap   * 15;
   
-  // Penalità
   if (genreOverlap === 0 && keywordOverlap === 0 && !isFromPrimary) score -= 100;
   else if (genreOverlap === 0 && isFromPrimary) score -= 25;
   
-  // Bonus qualità voto + popularity
-  if (d.vote_average >= 8.5)      score += 25;
-  else if (d.vote_average >= 8.0) score += 20;
-  else if (d.vote_average >= 7.5) score += 15;
-  else if (d.vote_average >= 7.0) score += 10;
-  else if (d.vote_average >= 6.5) score += 5;
-  else if (d.vote_average < 5.0)  score -= 30;
-  else if (d.vote_average < 6.0)  score -= 15;
+  // Bonus voto + popularity
+  if (d.vote_average >= 8.0) score += 20;
+  else if (d.vote_average >= 7.5) score += 12;
+  else if (d.vote_average >= 7.0) score += 6;
+  else if (d.vote_average < 5.5) score -= 20;
   
-  // Bonus popularity (piccolo, per evitare roba oscura)
-  if (d.popularity >= 100) score += 15;
-  else if (d.popularity >= 50) score += 10;
+  if (d.popularity >= 50) score += 10;
   else if (d.popularity >= 20) score += 5;
   
   return { ...candidate, score, keywordOverlap, genreOverlap };
 }
 
-// Fallback intelligente per genere
-async function smartFallback(mediaType, seedGenreIds, language) {
+async function smartFallback(mediaType, seedGenreIds, language, excludeIds = []) {
+  const excludeSet = new Set(excludeIds);
+  let items = [];
+  
   if (seedGenreIds && seedGenreIds.length > 0) {
     try {
       const byGenre = await tmdb.discover(mediaType, {
         with_genres: seedGenreIds.slice(0, 3).join(','),
         sort_by: 'popularity.desc',
         'vote_average.gte': 6.5
-      }, language, 1);
-      if (byGenre.length >= 12) return byGenre.slice(0, 18);
+      }, language, 2);
+      items = byGenre.filter(i => !excludeSet.has(i.id));
     } catch(e) {}
   }
-  return await tmdb.getPopular(mediaType, language, 1);
+  
+  if (items.length < 12) {
+    const popular = await tmdb.getPopular(mediaType, language, 2);
+    const more = popular.filter(i => !excludeSet.has(i.id));
+    items.push(...more);
+  }
+  
+  // Deduplica
+  const seen = new Set();
+  return items.filter(i => {
+    if (seen.has(i.id)) return false;
+    seen.add(i.id);
+    return true;
+  }).slice(0, 18);
 }
 
-async function buildCandidates(mediaType, rawSeedId, language) {
+async function buildCandidates(mediaType, rawSeedId, language, globalExcludeIds = []) {
   console.log(`\n🎯 buildCandidates: ${mediaType}/${rawSeedId}`);
 
   const metadata = await tmdb.getFullDetails(mediaType, rawSeedId, language);
@@ -81,7 +88,6 @@ async function buildCandidates(mediaType, rawSeedId, language) {
   console.log(`   ✅ Seed: "${metadata.title}"`);
   console.log(`      Keywords: ${metadata.keywordIds.slice(0,5).join(',') || 'none'}`);
   console.log(`      Genres: ${metadata.genres.map(g=>g.name).join(', ') || 'none'}`);
-  console.log(`      Companies: ${metadata.companyIds.slice(0,3).join(',') || 'none'}`);
 
   const seed = {
     seedKeywordIds: metadata.keywordIds,
@@ -92,7 +98,7 @@ async function buildCandidates(mediaType, rawSeedId, language) {
   };
 
   const candidates = [];
-  const seenIds = new Set([metadata.id]);
+  const seenIds = new Set([metadata.id, ...globalExcludeIds]);
   
   const add = (items, source, bonus) => {
     for (const item of items) {
@@ -106,7 +112,6 @@ async function buildCandidates(mediaType, rawSeedId, language) {
   add(metadata.recommendations, 'recommendation', 80);
   add(metadata.similar, 'similar', 70);
 
-  // Discover in parallelo per performance
   const [kw, genre, company, network, creator] = await Promise.allSettled([
     seed.seedKeywordIds.length
       ? tmdb.discover(mediaType, { with_keywords: seed.seedKeywordIds.slice(0,5).join(',') }, language, 2)
@@ -134,7 +139,7 @@ async function buildCandidates(mediaType, rawSeedId, language) {
   console.log(`   Candidati: ${candidates.length}`);
 
   if (!candidates.length) {
-    return await smartFallback(mediaType, seed.seedGenreIds, language);
+    return await smartFallback(mediaType, seed.seedGenreIds, language, globalExcludeIds);
   }
 
   const pool = candidates.slice(0, 80);
@@ -148,11 +153,11 @@ async function buildCandidates(mediaType, rawSeedId, language) {
   }
 
   if (!scored.length) {
-    return await smartFallback(mediaType, seed.seedGenreIds, language);
+    return await smartFallback(mediaType, seed.seedGenreIds, language, globalExcludeIds);
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const final = scored.slice(0, 18);
+  const final = scored.slice(0, 15);
   
   console.log(`   Finali: ${final.length}`);
   final.forEach(c => console.log(`     "${c.title}" (score:${Math.round(c.score)}, src:${c._source})`));
@@ -182,7 +187,6 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
   
   if (!validSeeds.length) return await tmdb.getPopular(mediaType, language, 2);
 
-  // Aggrega frequenze
   const keywordFreq = {}, genreFreq = {}, networkFreq = {}, companyFreq = {};
   const libraryIds = new Set();
   
@@ -199,7 +203,7 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
   const topNetworks = Object.entries(networkFreq).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([id])=>Number(id));
   const topCompanies = Object.entries(companyFreq).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([id])=>Number(id));
   
-  console.log(`   Profilo: kw:${topKeywords.length} genres:${topGenres.length} nets:${topNetworks.length} companies:${topCompanies.length}`);
+  console.log(`   Profilo: kw:${topKeywords.length} genres:${topGenres.length}`);
 
   const candidateMap = new Map();
   
@@ -258,20 +262,21 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
   return final.length ? final : await smartFallback(mediaType, topGenres, language);
 }
 
-async function getCatalog(catalogType, catalogId) {
+async function getCatalog(catalogType, catalogId, userUuidFromUrl = null) {
   console.log(`\n📺 getCatalog: "${catalogType}" / "${catalogId}"`);
   
   const parts = catalogId.split('-');
   const prefix = parts[0];
   let mediaType = parts[1];
-  let seedId = null, userUuid = null;
+  let seedId = null;
+  let userUuid = userUuidFromUrl;
 
   if (prefix === 'sim') {
     seedId = parts[2];
-    userUuid = parts.slice(3).join('-');
+    if (!userUuid) userUuid = parts.slice(3).join('-');
     mediaType = mediaType === 'movie' ? 'movie' : 'tv';
   } else if (prefix === 'rec') {
-    userUuid = parts.slice(2).join('-');
+    if (!userUuid) userUuid = parts.slice(2).join('-');
     mediaType = mediaType === 'movie' ? 'movie' : 'tv';
   } else if (prefix === 'setup') {
     return [{
@@ -285,7 +290,10 @@ async function getCatalog(catalogType, catalogId) {
     }];
   }
 
-  if (!userUuid) return [];
+  if (!userUuid) {
+    console.log('   ⚠️ No user UUID found');
+    return [];
+  }
 
   const cacheKey = `${catalogId}:${userUuid}`;
   const cached = cache.get(cacheKey);
@@ -298,18 +306,24 @@ async function getCatalog(catalogType, catalogId) {
   let items = [];
 
   if (prefix === 'sim' && seedId) {
-    items = await buildCandidates(mediaType, seedId, language);
+    // Ottieni prima i seed già usati per evitare duplicati tra cataloghi simili
+    const existingIds = cache.keys()
+      .filter(k => k.includes(userUuid) && k.includes('sim-movie'))
+      .flatMap(k => cache.get(k) || [])
+      .map(m => m.id.replace('tmdb:', ''));
+    
+    items = await buildCandidates(mediaType, seedId, language, existingIds);
   } else if (prefix === 'rec') {
     items = await buildPersonalizedRecs(mediaType, userUuid, language);
   }
 
   if (!items.length) {
-    items = await tmdb.getPopular(mediaType, language, 1);
+    items = await tmdb.getPopular(mediaType, language, 2);
   }
 
   const displayType = catalogType === 'movie' ? 'movie' : 'series';
   
-  const metas = items.map(item => ({
+  const metas = items.slice(0, 20).map(item => ({
     id: `tmdb:${item.id}`,
     type: displayType,
     name: item.title,
@@ -330,4 +344,4 @@ function invalidateCache(userUuid) {
   console.log(`🗑️ Cache invalidata: ${keys.length} entries`);
 }
 
-module.exports = { getCatalog, invalidateCache };
+module.exports = { getCatalog, invalidateCache, cache };
