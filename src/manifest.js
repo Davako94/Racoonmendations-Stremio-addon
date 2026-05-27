@@ -1,12 +1,13 @@
 const { getUserConfig } = require('./services/userStore');
+
 async function getManifest(userUuid) {
   if (!userUuid) {
     // Manifest base senza UUID (nessun catalogo personale)
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
+      name: "Racconmendations",
+      description: "🎬 Personalized recommendations based on your Stremio library",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [],
@@ -20,15 +21,15 @@ async function getManifest(userUuid) {
     
     if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
       return {
-        id: "racoonmendations",
+        id: "racconmendations",
         version: "3.0.0",
-        name: "Racoonmendations",
-        description: "Configure your addon first at /configure",
+        name: "Racconmendations",
+        description: "⚙️ Configure your addon first at /configure",
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [
-          { type: "movie", id: `setup-movie-${userUuid}`, name: "⚙️ Configure Racoonmendations" },
-          { type: "series", id: `setup-series-${userUuid}`, name: "⚙️ Configure Racoonmendations" }
+          { type: "movie", id: `setup-movie-${userUuid}`, name: "⚙️ Configure Racconmendations" },
+          { type: "series", id: `setup-series-${userUuid}`, name: "⚙️ Configure Racconmendations" }
         ],
         idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
       };
@@ -93,10 +94,10 @@ async function getManifest(userUuid) {
     });
     
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
+      name: "Racconmendations",
+      description: "🎬 Personalized recommendations based on your Stremio library",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: catalogs,
@@ -106,9 +107,9 @@ async function getManifest(userUuid) {
   } catch (error) {
     console.error('Error generating manifest:', error);
     return {
-      id: "racoonmendations",
+      id: "racconmendations",
       version: "3.0.0",
-      name: "Racoonmendations",
+      name: "Racconmendations",
       description: "Error loading recommendations",
       resources: ["catalog"],
       types: ["movie", "series"],
@@ -117,4 +118,5 @@ async function getManifest(userUuid) {
     };
   }
 }
+
 module.exports = { getManifest };
