@@ -1,9 +1,10 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
+const fetch = require('node-fetch');
 const catalogHandler = require('./src/handlers/catalog');
 const { getManifest } = require('./src/manifest');
-const { saveUserConfig, getUserConfig, getUserSeeds, getUserLanguage } = require('./src/services/userStore');
+const { saveUserConfig, getUserConfig } = require('./src/services/userStore');
 const stremioApi = require('./src/services/stremioApi');
 const tmdb = require('./src/services/tmdb');
 
@@ -12,17 +13,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
-// ============================================================
-// MANIFEST
-// ============================================================
 app.get('/manifest.json', (req, res) => {
   const userUuid = req.query.uuid;
   res.json(getManifest(userUuid));
 });
 
-// ============================================================
-// CATALOGO
-// ============================================================
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   const { type, catalogId } = req.params;
   if (!['movie', 'series'].includes(type)) {
@@ -37,16 +32,33 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   }
 });
 
-// ============================================================
-// CONFIG PAGE
-// ============================================================
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'src/public/configure.html'));
 });
 
-// ============================================================
-// API: LOGIN STREMIO (REALE)
-// ============================================================
+app.get('/api/poster', async (req, res) => {
+  const { path: imagePath, size = 'w185' } = req.query;
+  if (!imagePath) {
+    return res.status(400).json({ error: 'Path required' });
+  }
+  
+  try {
+    const proxyUrl = `https://image.tmdb.org/t/p/${size}${imagePath}`;
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.setHeader('Content-Type', 'image/jpeg');
+    
+    const imageResponse = await fetch(proxyUrl);
+    if (!imageResponse.ok) {
+      throw new Error(`TMDB image error: ${imageResponse.status}`);
+    }
+    
+    imageResponse.body.pipe(res);
+  } catch (error) {
+    console.error('Poster proxy error:', error.message);
+    res.redirect(`https://image.tmdb.org/t/p/w185${imagePath}`);
+  }
+});
+
 app.post('/api/stremio/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -56,26 +68,19 @@ app.post('/api/stremio/login', async (req, res) => {
   try {
     console.log(`🔐 Attempting Stremio login for: ${email}`);
     
-    // Login e fetch libreria
     const auth = await stremioApi.stremioLogin(email, password);
     console.log('✅ Stremio login successful');
     
     const rawLibrary = await stremioApi.getStremioLibraryRaw(auth.token);
     console.log(`📚 Raw library items: ${rawLibrary.length}`);
     
-    // Filtra solo attivi
     const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
-    console.log(`📚 Active items: ${activeItems.length} (movies: ${activeItems.filter(i => i.type === 'movie').length}, series: ${activeItems.filter(i => i.type === 'series' || i.type === 'show').length})`);
     
-    // Calcola continue watching
     const continueWatching = stremioApi.getContinueWatchingFromLibrary(rawLibrary);
     console.log(`⏯️ Continue watching: ${continueWatching.length}`);
     
-    // Estrai i seed di base
     const seeds = stremioApi.extractSeedsFromLibrary(rawLibrary, continueWatching);
-    console.log(`🌱 Seeds extracted: ${seeds.length}`);
     
-    // Arricchisci ogni seed con poster da TMDB (se manca)
     const enrichedSeeds = await Promise.all(seeds.map(async (seed) => {
       if (!seed.poster && seed.title) {
         try {
@@ -84,14 +89,11 @@ app.post('/api/stremio/login', async (req, res) => {
             seed.poster_path = searchResults[0].poster_path;
             seed.tmdb_id = searchResults[0].id;
           }
-        } catch(e) { 
-          // ignora errori di TMDB
-        }
+        } catch(e) {}
       }
       return seed;
     }));
     
-    // Prepara la risposta per la UI
     const libraryForUI = activeItems.map(item => ({
       id: stremioApi.extractContentId(item._id || item.id) || (item._id || item.id),
       title: item.name,
@@ -100,7 +102,6 @@ app.post('/api/stremio/login', async (req, res) => {
       year: item.year
     }));
     
-    // Deduplica la libreria per ID
     const uniqueLibrary = [];
     const seenIds = new Set();
     for (const item of libraryForUI) {
@@ -109,8 +110,6 @@ app.post('/api/stremio/login', async (req, res) => {
         uniqueLibrary.push(item);
       }
     }
-    
-    console.log(`✅ Final library for UI: ${uniqueLibrary.length} items`);
     
     res.json({
       success: true,
@@ -140,19 +139,8 @@ app.post('/api/stremio/login', async (req, res) => {
   }
 });
 
-// ============================================================
-// API: SALVA CONFIGURAZIONE UTENTE
-// ============================================================
 app.post('/api/save-config', async (req, res) => {
-  const { 
-    stremioEmail, 
-    selectedMovies, 
-    selectedSeries, 
-    selectedAnime, 
-    language, 
-    prefs, 
-    existingUuid 
-  } = req.body;
+  const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
   
   const userUuid = existingUuid || uuidv4();
   
@@ -171,23 +159,13 @@ app.post('/api/save-config', async (req, res) => {
     
     console.log(`✅ Config saved for user: ${userUuid}`);
     
-    res.json({ 
-      success: true, 
-      manifestUrl, 
-      userUuid 
-    });
+    res.json({ success: true, manifestUrl, userUuid });
   } catch (error) {
     console.error('❌ Error saving config:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// ============================================================
-// API: RICERCA TMDB (multilingua)
-// ============================================================
 app.get('/api/search', async (req, res) => {
   const { q, type, language = 'en' } = req.query;
   
@@ -198,7 +176,7 @@ app.get('/api/search', async (req, res) => {
   try {
     let results;
     if (type === 'anime') {
-      results = await tmdb.searchAnime(q);
+      results = await tmdb.searchAnime(q, language);
     } else {
       results = await tmdb.searchTmdb(q, type, language);
     }
@@ -209,9 +187,6 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// ============================================================
-// API: LINGUE SUPPORTATE
-// ============================================================
 app.get('/api/languages', (req, res) => {
   res.json([
     { code: 'en', name: 'English', flag: '🇬🇧' },
@@ -222,9 +197,6 @@ app.get('/api/languages', (req, res) => {
   ]);
 });
 
-// ============================================================
-// API: INVALIDA CACHE (webhook)
-// ============================================================
 app.post('/api/invalidate/:userUuid', (req, res) => {
   const { userUuid } = req.params;
   catalogHandler.invalidateCache(userUuid);
@@ -232,9 +204,6 @@ app.post('/api/invalidate/:userUuid', (req, res) => {
   res.json({ ok: true });
 });
 
-// ============================================================
-// API: OTTIENE STATISTICHE UTENTE
-// ============================================================
 app.get('/api/user-stats/:userUuid', async (req, res) => {
   const { userUuid } = req.params;
   try {
@@ -258,9 +227,6 @@ app.get('/api/user-stats/:userUuid', async (req, res) => {
   }
 });
 
-// ============================================================
-// HEALTH CHECK
-// ============================================================
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -270,9 +236,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ============================================================
-// AVVIO SERVER
-// ============================================================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🦝 Racoonmendations addon running on port ${PORT}`);
