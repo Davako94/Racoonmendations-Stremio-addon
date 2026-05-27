@@ -1,115 +1,190 @@
+// src/manifest.js
+
 const { getUserConfig } = require('./services/userStore');
 
 async function getManifest(userUuid) {
+
   if (!userUuid) {
+
     return {
-      id: "raccoonmendations",
-      version: "3.0.0",
-      name: "Raccoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
-      resources: ["catalog"],
-      types: ["movie", "series"],
+      id: 'raccoonmendations',
+      version: '3.1.0',
+
+      name: 'Raccoonmendations',
+
+      description:
+        'Personalized recommendations based on your library',
+
+      resources: [
+        'catalog',
+        'meta'
+      ],
+
+      types: [
+        'movie',
+        'series'
+      ],
+
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: false
+      },
+
       catalogs: [],
-      idPrefixes: ["tt", "tmdb:"]
+
+      idPrefixes: ['tt']
     };
   }
 
   try {
-    const config = await getUserConfig(userUuid);
-    
-    if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
+
+    const config =
+      await getUserConfig(userUuid);
+
+    if (!config) {
+
       return {
-        id: "raccoonmendations",
-        version: "3.0.0",
-        name: "Raccoonmendations",
-        description: "Configure your addon first at /configure",
-        resources: ["catalog"],
-        types: ["movie", "series"],
-        catalogs: [
-          { type: "movie", id: `setup-movie-${userUuid}`, name: "⚙️ Configure Raccoonmendations" },
-          { type: "series", id: `setup-series-${userUuid}`, name: "⚙️ Configure Raccoonmendations" }
+        id: 'raccoonmendations',
+        version: '3.1.0',
+
+        name: 'Raccoonmendations',
+
+        description:
+          'Configure addon first',
+
+        resources: [
+          'catalog',
+          'meta'
         ],
-        idPrefixes: ["tt", "tmdb:"]
+
+        types: [
+          'movie',
+          'series'
+        ],
+
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: false
+        },
+
+        catalogs: [],
+
+        idPrefixes: ['tt']
       };
     }
-    
-    const selectedMovies = config.selected_movies || [];
-    const selectedSeries = config.selected_series || [];
-    
-    // Seleziona 3 film casuali
-    const shuffledMovies = [...selectedMovies];
-    for (let i = shuffledMovies.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledMovies[i], shuffledMovies[j]] = [shuffledMovies[j], shuffledMovies[i]];
-    }
-    const randomMovies = shuffledMovies.slice(0, 3);
-    
-    // Seleziona 3 serie casuali
-    const shuffledSeries = [...selectedSeries];
-    for (let i = shuffledSeries.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledSeries[i], shuffledSeries[j]] = [shuffledSeries[j], shuffledSeries[i]];
-    }
-    const randomSeries = shuffledSeries.slice(0, 3);
-    
+
+    const selectedMovies =
+      config.selected_movies || [];
+
+    const selectedSeries =
+      config.selected_series || [];
+
     const catalogs = [];
-    
+
+    const randomMovies =
+      selectedMovies
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+
+    const randomSeries =
+      selectedSeries
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 3);
+
     for (const movie of randomMovies) {
-      if (movie.id && movie.title) {
-        catalogs.push({
-          type: "movie",
-          id: `sim-movie-${movie.id}-${userUuid}`,
-          name: `🎬 Similar to ${movie.title}`
-        });
-      }
+
+      if (!movie.id || !movie.title) continue;
+
+      catalogs.push({
+        type: 'movie',
+        id: `sim-movie-${movie.id}-${userUuid}`,
+        name: `🎬 Similar to ${movie.title}`
+      });
     }
-    
+
     for (const series of randomSeries) {
-      if (series.id && series.title) {
-        catalogs.push({
-          type: "series",
-          id: `sim-series-${series.id}-${userUuid}`,
-          name: `📺 Similar to ${series.title}`
-        });
-      }
+
+      if (!series.id || !series.title) continue;
+
+      catalogs.push({
+        type: 'series',
+        id: `sim-series-${series.id}-${userUuid}`,
+        name: `📺 Similar to ${series.title}`
+      });
     }
-    
+
     catalogs.push({
-      type: "movie",
+      type: 'movie',
       id: `rec-movies-${userUuid}`,
-      name: "✨ You might also like"
+      name: '✨ Recommended Movies'
     });
-    
+
     catalogs.push({
-      type: "series",
+      type: 'series',
       id: `rec-series-${userUuid}`,
-      name: "✨ You might also like"
+      name: '✨ Recommended Series'
     });
-    
+
     return {
-      id: "raccoonmendations",
-      version: "3.0.0",
-      name: "Raccoonmendations",
-      description: "Personalized recommendations based on your Stremio library",
-      resources: ["catalog"],
-      types: ["movie", "series"],
-      catalogs: catalogs,
-      idPrefixes: ["tt", "tmdb:"]
+
+      id: 'raccoonmendations',
+
+      version: '3.1.0',
+
+      name: 'Raccoonmendations',
+
+      description:
+        'Personalized recommendations based on your library',
+
+      resources: [
+        'catalog',
+        'meta'
+      ],
+
+      types: [
+        'movie',
+        'series'
+      ],
+
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: false
+      },
+
+      catalogs,
+
+      idPrefixes: ['tt']
     };
-    
-  } catch (error) {
-    console.error('Error generating manifest:', error);
+
+  } catch (err) {
+
+    console.error('Manifest error:', err);
+
     return {
-      id: "raccoonmendations",
-      version: "3.0.0",
-      name: "Raccoonmendations",
-      description: "Error loading recommendations",
-      resources: ["catalog"],
-      types: ["movie", "series"],
+      id: 'raccoonmendations',
+      version: '3.1.0',
+
+      name: 'Raccoonmendations',
+
+      description: 'Error',
+
+      resources: [
+        'catalog',
+        'meta'
+      ],
+
+      types: [
+        'movie',
+        'series'
+      ],
+
       catalogs: [],
-      idPrefixes: ["tt", "tmdb:"]
+
+      idPrefixes: ['tt']
     };
   }
 }
 
-module.exports = { getManifest };
+module.exports = {
+  getManifest
+};
