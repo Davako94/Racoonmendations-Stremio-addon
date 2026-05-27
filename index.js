@@ -17,16 +17,39 @@ app.use(express.static(path.join(__dirname, 'src/public')));
 // MANIFEST - STATICO (compatibile Stremio)
 // ============================================================
 app.get('/manifest.json', (req, res) => {
-  res.json(getManifest());
+  try {
+    const manifest = getManifest();
+    res.json(manifest);
+  } catch (err) {
+    console.error('❌ Manifest error:', err);
+    res.status(500).json({ 
+      id: "racconmendations",
+      version: "3.0.0",
+      name: "Racconmendations",
+      description: "Error loading manifest",
+      resources: ["catalog"],
+      types: ["movie", "series"],
+      catalogs: [
+        { type: "movie", id: "raccon-movies", name: "🎬 Racconmendations Movies" },
+        { type: "series", id: "raccon-series", name: "📺 Racconmendations Series" }
+      ],
+      idPrefixes: ["tt", "tmdb"]
+    });
+  }
 });
 
-// Endpoint per aiometadata con UUID nel path
+// Endpoint per aiometadata
 app.get('/stremio/:userUuid/:compressedConfig/manifest.json', (req, res) => {
-  res.json(getManifest());
+  try {
+    const manifest = getManifest();
+    res.json(manifest);
+  } catch (err) {
+    res.status(500).json({ error: 'Manifest error' });
+  }
 });
 
 // ============================================================
-// CATALOGO - gestisce sia film che serie
+// CATALOGO
 // ============================================================
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   const { type, catalogId } = req.params;
@@ -38,7 +61,7 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   }
   
   try {
-    // Leggi l'UUID dalla query string (passato durante l'installazione)
+    // Leggi l'UUID dalla query string
     const userUuid = req.query.uuid;
     
     if (!userUuid) {
@@ -102,10 +125,10 @@ app.get('/poster/:type/:id', async (req, res) => {
   try {
     let posterPath = null;
     if (type === 'movie') {
-      const details = await tmdb.getDetails('movie', id, 'en');
+      const details = await tmdb.getDetails?.('movie', id, 'en');
       posterPath = details?.poster_path;
     } else {
-      const details = await tmdb.getDetails('series', id, 'en');
+      const details = await tmdb.getDetails?.('series', id, 'en');
       posterPath = details?.poster_path;
     }
     
@@ -125,7 +148,7 @@ app.get('/poster/:type/:id', async (req, res) => {
 });
 
 // ============================================================
-// API: Config endpoints (per aiometadata)
+// API: Config endpoints
 // ============================================================
 
 // Save user config
@@ -372,7 +395,9 @@ app.get('/api/languages', (req, res) => {
 // ============================================================
 app.post('/api/invalidate/:userUuid', (req, res) => {
   const { userUuid } = req.params;
-  catalogHandler.invalidateCache(userUuid);
+  if (catalogHandler && catalogHandler.invalidateCache) {
+    catalogHandler.invalidateCache(userUuid);
+  }
   console.log(`🗑️ Cache invalidated for user: ${userUuid}`);
   res.json({ ok: true });
 });
@@ -407,7 +432,8 @@ app.get('/api/user-stats/:userUuid', async (req, res) => {
 // CACHE ADMIN
 // ============================================================
 app.get('/api/cache/health', (req, res) => {
-  res.json({ status: 'ok', keys: catalogHandler.cache?.keys()?.length || 0 });
+  const keysCount = catalogHandler?.cache?.keys()?.length || 0;
+  res.json({ status: 'ok', keys: keysCount });
 });
 
 // ============================================================
@@ -432,5 +458,4 @@ app.listen(PORT, () => {
   console.log(`📄 Manifest: http://localhost:${PORT}/manifest.json`);
 });
 
-// Esporta cache per admin
-module.exports = { app };
+module.exports = app;
