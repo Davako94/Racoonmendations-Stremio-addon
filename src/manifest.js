@@ -2,8 +2,6 @@ const { getUserConfig } = require('./services/userStore');
 
 const EXTRA = [{ name: 'skip', isRequired: false }];
 
-// ─── Rotazione deterministica: cambia ogni 2 giorni ──────────────────────────
-// Stessa rotazione per tutti gli utenti nello stesso periodo → cache efficiente
 function getRotationSeed() {
   return Math.floor(Date.now() / (2 * 24 * 60 * 60 * 1000));
 }
@@ -58,9 +56,9 @@ async function getManifest(userUuid) {
     const selectedSeries = config.selected_series || [];
     const seed = getRotationSeed();
 
-    // 2 film e 2 serie casuali, ruotano ogni 2 giorni
-    const rotatedMovies = deterministicShuffle(selectedMovies, seed).slice(0, 2);
-    const rotatedSeries = deterministicShuffle(selectedSeries, seed + 1).slice(0, 2);
+    // 3 film e 3 serie (invece di 2) per più varietà
+    const rotatedMovies = deterministicShuffle(selectedMovies, seed).slice(0, 3);
+    const rotatedSeries = deterministicShuffle(selectedSeries, seed + 1).slice(0, 3);
 
     const catalogs = [];
 
@@ -86,14 +84,13 @@ async function getManifest(userUuid) {
       }
     }
 
-    // Raccomandazioni personalizzate
-    // BUGFIX: "rec-movie" non "rec-movies" → parts[1]="movie" ✓
     catalogs.push({
       type: 'movie',
       id: `rec-movie-${userUuid}`,
       name: '✨ You might also like',
       extra: EXTRA
     });
+    
     catalogs.push({
       type: 'series',
       id: `rec-series-${userUuid}`,
