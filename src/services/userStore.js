@@ -1,16 +1,13 @@
 const { createClient } = require('@supabase/supabase-js');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// Salva configurazione - gestisce sia insert che update
 async function saveUserConfig(uuid, data) {
-  // Prima cerca se esiste già un utente con questa email
   const { data: existing } = await supabase
     .from('user_configs')
     .select('uuid')
     .eq('stremio_email', data.stremioEmail)
     .maybeSingle();
   
-  // Se esiste, usa l'UUID esistente e fai UPDATE
   if (existing) {
     const { error } = await supabase
       .from('user_configs')
@@ -23,12 +20,10 @@ async function saveUserConfig(uuid, data) {
         updated_at: new Date()
       })
       .eq('uuid', existing.uuid);
-    
     if (error) throw error;
     return existing.uuid;
   }
   
-  // Se non esiste, fai INSERT
   const { error } = await supabase
     .from('user_configs')
     .insert({
@@ -42,7 +37,6 @@ async function saveUserConfig(uuid, data) {
       created_at: new Date(),
       updated_at: new Date()
     });
-  
   if (error) throw error;
   return uuid;
 }
@@ -58,6 +52,7 @@ async function getUserConfig(uuid) {
 }
 
 async function getUserConfigByEmail(email) {
+  if (!email) return null;
   const { data, error } = await supabase
     .from('user_configs')
     .select('uuid, selected_movies, selected_series, selected_anime, language, preferences')
