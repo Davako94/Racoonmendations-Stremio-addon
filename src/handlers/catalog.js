@@ -2,7 +2,6 @@ const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
 const { getUserLanguage, getUserLibrary } = require('../services/userStore');
 
-// Cache estesa per le operazioni pesanti: 48 ore (172800 secondi)
 const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -12,10 +11,7 @@ function overlap(a = [], b = []) {
 }
 
 function scoreCandidate(candidate, seed) {
-  const {
-    seedKeywordIds, seedGenreIds, seedCompanyIds,
-    seedNetworkIds, seedCreatorIds
-  } = seed;
+  const { seedKeywordIds, seedGenreIds, seedCompanyIds, seedNetworkIds, seedCreatorIds } = seed;
   const d = candidate.details;
 
   const keywordOverlap = overlap(seedKeywordIds, d.keywordIds);
@@ -28,20 +24,22 @@ function scoreCandidate(candidate, seed) {
   const hasKeywordMatch = keywordOverlap >= 1;
 
   // Hard filter: deve avere almeno una relazione semantica
-  if (!isFromPrimary && !hasKeywordMatch) return null;
+  if (!isFromPrimary && !hasKeywordMatch && genreOverlap === 0) return null;
 
   let score = candidate._scoreBonus || 0;
+
+  // Scoring pesato — keyword e creator sono i segnali più forti
   score += keywordOverlap * 45;
-  score += genreOverlap   * 15;
+  score += creatorOverlap * 50;
   score += companyOverlap * 40;
   score += networkOverlap * 30;
-  score += creatorOverlap * 50;
+  score += genreOverlap   * 15;
 
-  // Penalità ridotta e condizionale
+  // Penalità solo se nessuna relazione semantica ma non da fonte primaria
   if (genreOverlap === 0 && keywordOverlap === 0 && !isFromPrimary) score -= 80;
   else if (genreOverlap === 0 && isFromPrimary) score -= 20;
 
-  // Bonus qualità
+  // Bonus qualità voto
   if (d.vote_average >= 8.0)      score += 20;
   else if (d.vote_average >= 7.5) score += 12;
   else if (d.vote_average >= 7.0) score += 6;
@@ -50,9 +48,9 @@ function scoreCandidate(candidate, seed) {
   return { ...candidate, score, keywordOverlap, genreOverlap };
 }
 
-// ─── buildCandidates: simili a UN singolo seedId (Legacy/Dinamico) ───────────
+// ─── buildCandidates: simili a UN singolo seedId ─────────────────────────────
 async function buildCandidates(mediaType, rawSeedId, language) {
-  console.log(`🎯 buildCandidates → TMDB ID: ${rawSeedId}`);
+  console.log(`\n🎯 buildCandidates → type=${mediaType} id=${rawSeedId}`);
 
   const metadata = await tmdb.getFullDetails(mediaType, rawSeedId, language);
   if (!metadata) {
@@ -60,8 +58,7 @@ async function buildCandidates(mediaType, rawSeedId, language) {
     return [];
   }
 
-  const displayName = metadata.title || metadata.name || 'Unknown';
-  console.log(`   ✅ Seed: "${displayName}" (TMDB: ${metadata.id})`);
+  console.log(`   ✅ Seed: "${metadata.title}" (TMDB: ${metadata.id})`);
   console.log(`   Keywords: ${metadata.keywords.slice(0, 5).map(k => k.name).join(', ')}`);
   console.log(`   Genres:   ${metadata.genres.map(g => g.name).join(', ')}`);
 
@@ -85,49 +82,43 @@ async function buildCandidates(mediaType, rawSeedId, language) {
     }
   };
 
-  // Sorgenti ordinate per rilevanza
+  // Fonti ordinate per rilevanza semantica
   add(metadata.recommendations, 'recommendation', 80);
   add(metadata.similar,         'similar',        70);
 
-  if (seed.seedKeywordIds.length) {
-    const kw = await tmdb.discover(
-      mediaType, { with_keywords: seed.seedKeywordIds.slice(0, 5).join(',') }, language, 2
-    );
-    add(kw, 'keyword', 40);
-  }
+  const discovers = await Promise.allSettled([
+    // Discover per keyword (top 5 keyword del seed)
+    seed.seedKeywordIds.length
+      ? tmdb.discover(mediaType, { with_keywords: seed.seedKeywordIds.slice(0, 5).join(',') }, language, 2)
+      : Promise.resolve([]),
+    // Discover per genre
+    seed.seedGenreIds.length
+      ? tmdb.discover(mediaType, { with_genres: seed.seedGenreIds.join(','), sort_by: 'vote_average.desc' }, language, 1)
+      : Promise.resolve([]),
+    // Discover per studio
+    seed.seedCompanyIds.length
+      ? tmdb.discover(mediaType, { with_companies: seed.seedCompanyIds.join('|') }, language, 1)
+      : Promise.resolve([]),
+    // TV: network
+    (mediaType === 'tv' && seed.seedNetworkIds.length)
+      ? tmdb.discover(mediaType, { with_networks: seed.seedNetworkIds.join('|') }, language, 1)
+      : Promise.resolve([]),
+    // TV: creator
+    (mediaType === 'tv' && seed.seedCreatorIds.length)
+      ? tmdb.discover(mediaType, { with_people: seed.seedCreatorIds.join('|') }, language, 1)
+      : Promise.resolve([])
+  ]);
 
-  if (seed.seedGenreIds.length) {
-    const byGenre = await tmdb.discover(
-      mediaType, { with_genres: seed.seedGenreIds.join(','), sort_by: 'vote_average.desc' }, language, 1
-    );
-    add(byGenre, 'genre', 25);
-  }
-
-  if (seed.seedCompanyIds.length) {
-    const byCompany = await tmdb.discover(
-      mediaType, { with_companies: seed.seedCompanyIds.join('|') }, language, 1
-    );
-    add(byCompany, 'company', 50);
-  }
-
-  if (mediaType === 'tv') {
-    if (seed.seedNetworkIds.length) {
-      const byNet = await tmdb.discover(
-        mediaType, { with_networks: seed.seedNetworkIds.join('|') }, language, 1
-      );
-      add(byNet, 'network', 35);
-    }
-    if (seed.seedCreatorIds.length) {
-      const byCreator = await tmdb.discover(
-        mediaType, { with_people: seed.seedCreatorIds.join('|') }, language, 1
-      );
-      add(byCreator, 'creator', 45);
-    }
-  }
+  const [kw, genre, company, network, creator] = discovers;
+  if (kw.status      === 'fulfilled') add(kw.value,      'keyword', 40);
+  if (genre.status   === 'fulfilled') add(genre.value,   'genre',   25);
+  if (company.status === 'fulfilled') add(company.value, 'company', 50);
+  if (network.status === 'fulfilled') add(network.value, 'network', 35);
+  if (creator.status === 'fulfilled') add(creator.value, 'creator', 45);
 
   console.log(`   Candidati grezzi: ${candidates.length}`);
 
-  // Fetch details in parallelo (max 80)
+  // Fetch details in PARALLELO (bugfix: era sequenziale)
   const pool = candidates.slice(0, 80);
   const detailsList = await tmdb.getDetailsBatch(mediaType, pool.map(c => c.id), language, 8);
 
@@ -143,29 +134,28 @@ async function buildCandidates(mediaType, rawSeedId, language) {
 
   console.log(`   Finali: ${final.length}`);
   final.forEach(c =>
-    console.log(`     "${c.title || c.name}" score:${Math.round(c.score)} kw:${c.keywordOverlap} src:${c._source}`)
+    console.log(`     "${c.title}" score:${Math.round(c.score)} kw:${c.keywordOverlap} genre:${c.genreOverlap} src:${c._source}`)
   );
 
   return final;
 }
 
 // ─── buildPersonalizedRecs: cuore del sistema Netflix-like ───────────────────
-async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) {
-  console.log(`🧠 buildPersonalizedRecs → user: ${userUuid}, libType: ${libraryType}, tmdbType: ${tmdbType}`);
+async function buildPersonalizedRecs(mediaType, userUuid, language) {
+  console.log(`\n🧠 buildPersonalizedRecs → type=${mediaType} user=${userUuid}`);
 
-  // Chiediamo al db i salvataggi specifici ('movie', 'series' o 'anime')
-  const libraryItems = await getUserLibrary(userUuid, libraryType);
+  const libraryItems = await getUserLibrary(userUuid, mediaType);
 
-  if (!libraryItems || !libraryItems.length) {
+  if (!libraryItems.length) {
     console.log('   Libreria vuota → fallback popular');
-    return await tmdb.getPopular(tmdbType, language, 2);
+    return await tmdb.getPopular(mediaType, language, 2);
   }
 
-  console.log(`   Titoli in libreria (${libraryType}): ${libraryItems.length}`);
+  console.log(`   Titoli in libreria: ${libraryItems.length}`);
 
-  // Ottieni full details per TUTTI i seed
+  // Full details per tutti i seed in parallelo
   const detailsList = await Promise.allSettled(
-    libraryItems.map(item => tmdb.getFullDetails(tmdbType, item.id, language))
+    libraryItems.map(item => tmdb.getFullDetails(mediaType, item.id, language))
   );
 
   const validSeeds = detailsList
@@ -175,11 +165,10 @@ async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) 
   console.log(`   Seed risolti: ${validSeeds.length}/${libraryItems.length}`);
 
   if (!validSeeds.length) {
-    console.log('   Nessun seed valido → fallback popular');
-    return await tmdb.getPopular(tmdbType, language, 2);
+    return await tmdb.getPopular(mediaType, language, 2);
   }
 
-  // ── Costruisci profilo utente aggregato ───────────────────────────────────
+  // ── Profilo utente aggregato ──────────────────────────────────────────────
   const keywordFreq = {};
   const genreFreq   = {};
   const networkFreq = {};
@@ -187,29 +176,22 @@ async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) 
 
   for (const seed of validSeeds) {
     libraryIds.add(seed.id);
-    for (const kwId of seed.keywordIds)    keywordFreq[kwId] = (keywordFreq[kwId] || 0) + 1;
-    for (const g of seed.genres)           genreFreq[g.id]   = (genreFreq[g.id]   || 0) + 1;
-    for (const nId of seed.networkIds)     networkFreq[nId]  = (networkFreq[nId]  || 0) + 1;
+    for (const kwId of seed.keywordIds) keywordFreq[kwId] = (keywordFreq[kwId] || 0) + 1;
+    for (const g of seed.genres)        genreFreq[g.id]   = (genreFreq[g.id]   || 0) + 1;
+    for (const nId of seed.networkIds)  networkFreq[nId]  = (networkFreq[nId]  || 0) + 1;
   }
 
-  const topKeywords = Object.entries(keywordFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => Number(id));
-  const topGenres = Object.entries(genreFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => Number(id));
-  const topNetworks = Object.entries(networkFreq)
-    .sort((a, b) => b[1] - a[1]).slice(0, 2).map(([id]) => Number(id));
+  const topKeywords = Object.entries(keywordFreq).sort((a,b) => b[1]-a[1]).slice(0,6).map(([id]) => Number(id));
+  const topGenres   = Object.entries(genreFreq).sort((a,b)   => b[1]-a[1]).slice(0,3).map(([id]) => Number(id));
+  const topNetworks = Object.entries(networkFreq).sort((a,b) => b[1]-a[1]).slice(0,2).map(([id]) => Number(id));
 
-  console.log(`   Profilo utente:`);
-  console.log(`     Keywords: ${topKeywords.join(', ')}`);
-  console.log(`     Genres:   ${topGenres.join(', ')}`);
-  if (topNetworks.length) console.log(`     Networks: ${topNetworks.join(', ')}`);
+  console.log(`   Profilo → kw:${topKeywords.join(',')} genres:${topGenres.join(',')} networks:${topNetworks.join(',')}`);
 
-  // ── Discover in parallelo basato sul profilo ──────────────────────────────
+  // ── Discover basato sul profilo in parallelo ──────────────────────────────
   const candidateMap = new Map();
-
   const addToMap = (items, bonus) => {
     for (const item of items) {
-      if (libraryIds.has(item.id)) continue; 
+      if (libraryIds.has(item.id)) continue;
       if (!candidateMap.has(item.id)) {
         candidateMap.set(item.id, { ...item, _scoreBonus: bonus, _source: 'personalized' });
       } else {
@@ -218,24 +200,23 @@ async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) 
     }
   };
 
-  const discoverResults = await Promise.allSettled([
+  const [byKeyword, byGenre, byNetwork] = await Promise.allSettled([
     topKeywords.length
-      ? tmdb.discover(tmdbType, { with_keywords: topKeywords.join(',') }, language, 2)
+      ? tmdb.discover(mediaType, { with_keywords: topKeywords.join(',') }, language, 2)
       : Promise.resolve([]),
     topGenres.length
-      ? tmdb.discover(tmdbType, { with_genres: topGenres.join(','), sort_by: 'vote_average.desc' }, language, 2)
+      ? tmdb.discover(mediaType, { with_genres: topGenres.join(','), sort_by: 'vote_average.desc' }, language, 2)
       : Promise.resolve([]),
-    topNetworks.length && tmdbType === 'tv'
-      ? tmdb.discover(tmdbType, { with_networks: topNetworks.join('|') }, language, 1)
+    (topNetworks.length && mediaType === 'tv')
+      ? tmdb.discover(mediaType, { with_networks: topNetworks.join('|') }, language, 1)
       : Promise.resolve([])
   ]);
 
-  const [byKeyword, byGenre, byNetwork] = discoverResults;
   if (byKeyword.status === 'fulfilled') addToMap(byKeyword.value, 60);
-  if (byGenre.status === 'fulfilled')   addToMap(byGenre.value,   30);
+  if (byGenre.status   === 'fulfilled') addToMap(byGenre.value,   30);
   if (byNetwork.status === 'fulfilled') addToMap(byNetwork.value, 40);
 
-  // ── Scoring finale contro il profilo aggregato ────────────────────────────
+  // ── Scoring finale ────────────────────────────────────────────────────────
   const userSeed = {
     seedKeywordIds: topKeywords,
     seedGenreIds:   topGenres,
@@ -248,105 +229,92 @@ async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) 
   console.log(`   Candidati discover: ${candidates.length}`);
 
   const pool = candidates.slice(0, 60);
-  const detailsForPool = await tmdb.getDetailsBatch(
-    tmdbType, pool.map(c => c.id), language, 8
-  );
+  const details = await tmdb.getDetailsBatch(mediaType, pool.map(c => c.id), language, 8);
 
   const scored = [];
   for (let i = 0; i < pool.length; i++) {
-    if (!detailsForPool[i]) continue;
-    const result = scoreCandidate({ ...pool[i], details: detailsForPool[i] }, userSeed);
+    if (!details[i]) continue;
+    const result = scoreCandidate({ ...pool[i], details: details[i] }, userSeed);
     if (result) scored.push(result);
   }
 
   scored.sort((a, b) => b.score - a.score);
   const final = scored.slice(0, 20);
-
   console.log(`   ✅ Personalized recs: ${final.length} titoli`);
   return final;
 }
 
-// ─── getCatalog: Entry Point Principale (Connesso a index.js) ────────────────
-async function getCatalog(catalogType, catalogId, userUuid) {
-  console.log(`\n📺 getCatalog: type="${catalogType}", id="${catalogId}", uuid="${userUuid}"`);
+// ─── getCatalog: entry point principale ──────────────────────────────────────
+async function getCatalog(catalogType, catalogId) {
+  console.log(`\n📺 getCatalog type="${catalogType}" id="${catalogId}"`);
 
-  // Gestione Utente non configurato
-  if (!userUuid) {
+  const parts = catalogId.split('-');
+  const prefix    = parts[0]; // "sim" | "rec" | "setup"
+  const mediaType = parts[1]; // "movie" | "series"
+  let seedId   = null;
+  let userUuid = null;
+
+  if (prefix === 'sim') {
+    // sim-movie-SEEDID-UUID  oppure  sim-series-SEEDID-UUID
+    seedId   = parts[2];
+    userUuid = parts.slice(3).join('-');
+  } else if (prefix === 'rec') {
+    // rec-movie-UUID  oppure  rec-series-UUID
+    // BUGFIX: era "rec-movies-UUID" → parts[1]="movies" ≠ "movie"
+    // Ora con manifest corretto parts[1] è sempre "movie" o "series" ✓
+    userUuid = parts.slice(2).join('-');
+  } else if (prefix === 'setup') {
     return [{
       id: 'setup_placeholder',
       type: catalogType,
-      name: '⚠️ Setup Required',
+      name: '⚠️ Configure Racoonmendations',
       poster: null,
-      description: 'Open addon configuration to select your favorite titles.',
+      description: 'Go to /configure to select your favorite movies and series',
       releaseInfo: '',
       extra: {}
     }];
   }
 
-  const cacheKey = `${catalogType}:${catalogId}:${userUuid}`;
+  if (!userUuid) return [];
+
+  // Normalizza mediaType: Stremio usa "series" ma TMDB usa "tv"
+  const tmdbType = mediaType === 'series' ? 'tv' : 'movie';
+
+  const cacheKey = `${catalogId}:${userUuid}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     console.log(`   ✅ Cache hit: ${cached.length} items`);
     return cached;
   }
 
-  // Otteniamo la lingua (default: en)
-  let language = 'en';
-  try { language = await getUserLanguage(userUuid) || 'en'; } catch(e) {}
-  
+  const language = await getUserLanguage(userUuid);
   let items = [];
 
-  // Routing basato sull'ID del catalogo (Manifest)
-  try {
-    if (catalogId === 'raccon-movies') {
-      items = await buildPersonalizedRecs('movie', 'movie', userUuid, language);
-    } else if (catalogId === 'raccon-series') {
-      items = await buildPersonalizedRecs('series', 'tv', userUuid, language);
-    } else if (catalogId === 'raccon-anime') {
-      // Per gli anime cerchiamo i salvataggi 'anime' ma li passiamo a TMDB come 'tv'
-      items = await buildPersonalizedRecs('anime', 'tv', userUuid, language);
-    } 
-    // Fallback Legacy (es. sim-movie-12345)
-    else if (catalogId.startsWith('sim-')) {
-      const parts = catalogId.split('-');
-      const mediaType = parts[1]; // 'movie' o 'tv'
-      const seedId = parts[2];
-      items = await buildCandidates(mediaType, seedId, language);
-    }
-
-    // Fallback assoluto: se il motore non trova nulla, mostra roba popolare
-    if (!items || !items.length) {
-      console.log('   ⚠️ Nessun risultato dal motore → fallback popular');
-      const tmdbType = catalogType === 'series' ? 'tv' : 'movie';
-      items = await tmdb.getPopular(tmdbType, language, 1);
-    }
-  } catch (err) {
-    console.error('   ❌ Errore durante la generazione catalogo:', err);
-    items = [];
+  if (prefix === 'sim' && seedId) {
+    items = await buildCandidates(tmdbType, seedId, language);
+  } else if (prefix === 'rec') {
+    items = await buildPersonalizedRecs(tmdbType, userUuid, language);
   }
 
-  // Formattazione per Stremio
-  const metas = (items || []).map(item => {
-    // TMDB usa title per i film, name per serie/anime
-    const displayName = item.title || item.name || 'Unknown';
-    // Estrazione anno di uscita
-    const dateField = item.release_date || item.first_air_date;
-    const year = dateField ? dateField.split('-')[0] : '';
+  // Fallback
+  if (!items.length) {
+    console.log('   ⚠️ Fallback → popular');
+    items = await tmdb.getPopular(tmdbType, language, 1);
+  }
 
-    return {
-      id: `tmdb:${item.id}`,
-      type: catalogType, // Manteniamo la tipologia che Stremio si aspetta (movie/series)
-      name: displayName,
-      poster: item.poster_path
-        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
-        : null,
-      description: item.overview || '',
-      releaseInfo: year,
-      extra: {}
-    };
-  });
+  const metas = items.map(item => ({
+    id: `tmdb:${item.id}`,
+    type: mediaType, // Stremio vuole "movie" o "series"
+    name: item.title,
+    poster: item.poster_path
+      ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+      : null,
+    description: item.overview || '',
+    releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+    extra: {}
+  }));
 
-  console.log(`✅ Generati ${metas.length} metas per il catalogo`);
+  console.log(`✅ Generati ${metas.length} items`);
   cache.set(cacheKey, metas);
   return metas;
 }
@@ -354,7 +322,7 @@ async function getCatalog(catalogType, catalogId, userUuid) {
 function invalidateCache(userUuid) {
   const keys = cache.keys().filter(k => k.includes(userUuid));
   cache.del(keys);
-  console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} entries rimosse`);
+  console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} entries`);
 }
 
 module.exports = { getCatalog, invalidateCache };
