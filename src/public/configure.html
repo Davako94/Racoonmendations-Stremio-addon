@@ -16,13 +16,16 @@
     button:hover { background: #ffa01e; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 1rem; margin-top: 1rem; max-height: 400px; overflow-y: auto; padding: 0.5rem; }
-    .grid-card { background: #1e2a3a; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; text-align: center; position: relative; }
+    .grid-card { background: #1e2a3a; border-radius: 12px; overflow: hidden; cursor: pointer; transition: all 0.2s; border: 2px solid transparent; text-align: center; }
     .grid-card.selected { border-color: #ffb347; background: #2a3a4a; transform: scale(0.98); }
     .grid-card img { width: 100%; aspect-ratio: 2/3; object-fit: cover; display: block; }
-    .grid-card .fallback { width: 100%; aspect-ratio: 2/3; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding: 8px; position: relative; overflow: hidden; background: linear-gradient(160deg, #1a2a4a, #0a0a1a); }
-    .grid-card .fallback .title { font-size: 0.7rem; padding: 0.3rem; text-align: center; position: relative; z-index: 1; color: rgba(255,255,255,0.8); font-weight: 600; }
-    .grid-card .fallback .year { position: absolute; top: 6px; right: 6px; font-size: 9px; color: rgba(255,255,255,0.3); }
-    .grid-card .fallback .icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -60%); font-size: 22px; opacity: 0.15; }
+    .grid-card .no-poster {
+      width: 100%; aspect-ratio: 2/3;
+      display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      font-size: 2rem;
+    }
+    .grid-card .title { font-size: 0.7rem; padding: 0.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .section { background: #1a212e; border-radius: 20px; padding: 1rem; margin-bottom: 1.5rem; }
     .count-badge { background: #ffb347; color: #0a0f1a; border-radius: 20px; padding: 0.2rem 0.6rem; font-size: 0.8rem; display: inline-block; margin-left: 0.5rem; }
     .loader { display: inline-block; width: 20px; height: 20px; border: 3px solid #fff; border-radius: 50%; border-top-color: #ffb347; animation: spin 1s ease-in-out infinite; margin-left: 10px; vertical-align: middle; }
@@ -40,7 +43,6 @@
     .lang-btn { background: #1e2a3a; border: 2px solid #2d3e4f; border-radius: 40px; padding: 0.4rem 0.8rem; cursor: pointer; width: auto; margin-top: 0; font-size: 0.8rem; }
     .lang-btn.active { background: #ffb347; color: #0a0f1a; border-color: #ffb347; }
     hr { border-color: #2d3e4f; margin: 1rem 0; }
-    .warning { background: #332200; padding: 0.8rem; border-radius: 16px; margin: 1rem 0; border-left: 4px solid #ffb347; }
   </style>
 </head>
 <body>
@@ -50,7 +52,7 @@
     Racoonmendations
     <span>🎬</span>
   </h1>
-  <p style="text-align: center;">Click on posters to select your favorite movies & series.<br>The raccoon will recommend similar titles!</p>
+  <p style="text-align: center;">Click on posters to select your favorite movies & series.</p>
 
   <!-- Login Section -->
   <div class="section">
@@ -77,7 +79,7 @@
   <div id="selectionSection" style="display:none;">
     <div class="section">
       <div class="flex-between">
-        <h2>🎥 3. Select Your Favorite Movies <span id="movieCount" class="count-badge">0</span></h2>
+        <h2>🎥 Select Your Favorite Movies <span id="movieCount" class="count-badge">0</span></h2>
         <button id="clearMoviesBtn" style="width: auto; padding: 0.3rem 0.8rem; margin: 0;">Clear</button>
       </div>
       <div id="moviesGrid" class="grid"></div>
@@ -85,7 +87,7 @@
 
     <div class="section">
       <div class="flex-between">
-        <h2>📺 4. Select Your Favorite Series <span id="seriesCount" class="count-badge">0</span></h2>
+        <h2>📺 Select Your Favorite Series <span id="seriesCount" class="count-badge">0</span></h2>
         <button id="clearSeriesBtn" style="width: auto; padding: 0.3rem 0.8rem; margin: 0;">Clear</button>
       </div>
       <div id="seriesGrid" class="grid"></div>
@@ -93,7 +95,7 @@
 
     <div class="section">
       <div class="flex-between">
-        <h2>⏯️ 5. Continue Watching (auto-selected)</h2>
+        <h2>⏯️ Continue Watching (auto-selected)</h2>
       </div>
       <div id="continueGrid" class="grid"></div>
     </div>
@@ -111,9 +113,6 @@
     <p><strong>📌 Install this link in Stremio:</strong></p>
     <div class="install-link" id="manifestUrl"></div>
     <button class="copy-btn" onclick="copyToClipboard()">📋 Copy Link</button>
-    <p style="margin-top:1rem; font-size:0.8rem; color:#6c7a89;">
-      💡 <strong>How to install:</strong> Open Stremio → Settings → Addons → Paste the link → Install
-    </p>
   </div>
   <div class="footer">🦝 Racoonmendations • Powered by TMDB</div>
 </div>
@@ -140,75 +139,48 @@
   const seriesCountSpan = document.getElementById('seriesCount');
   const generateBtn = document.getElementById('generateBtn');
 
-  // Palette di colori per fallback (come nell'altro progetto)
-  const PAL = [['#1a1a3e','#0d0d2b'],['#1e3a2f','#0a1f18'],['#3a1a2e','#1f0d1a'],
-               ['#1a2e3a','#0d1a1f'],['#2e2a1a','#1a180d'],['#2e1a1a','#1f0d0d'],
-               ['#1a2a3e','#0d1825'],['#2a1e3e','#160d25'],['#1e2e2e','#0d1a1a']];
-  
-  function getPalette(str) {
-    let h = 0;
-    for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) & 0xffffffff;
-    return PAL[Math.abs(h) % PAL.length];
+  function copyToClipboard() {
+    const url = document.getElementById('manifestUrl').innerText;
+    navigator.clipboard.writeText(url);
+    alert('Link copied!');
   }
 
-  function getPosterUrl(posterPath, size = 'w185') {
-    if (!posterPath) return null;
-    // Usa il proxy per evitare problemi di CORS e blocchi
-    return `/api/poster?path=${encodeURIComponent(posterPath)}&size=${size}`;
+  function updateCounters() {
+    movieCountSpan.innerText = selectedMovies.length;
+    seriesCountSpan.innerText = selectedSeries.length;
+    generateBtn.disabled = !(selectedMovies.length >= 5 && selectedSeries.length >= 5);
+    if (!generateBtn.disabled) generateBtn.style.background = '#ffb347';
+    else generateBtn.style.background = '#555';
   }
 
-  function createFallbackCard(title, year, type) {
-    const [c1, c2] = getPalette(title);
-    const isMovie = type === 'movie';
+  function createCard(item, isSelected) {
+    const posterUrl = item.poster_path;
+    const title = item.title || 'Unknown';
+    const type = item.type;
+    
+    let posterHtml = '';
+    if (posterUrl) {
+      posterHtml = `<img src="${posterUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`;
+    }
+    posterHtml += `<div class="no-poster" style="display: ${posterUrl ? 'none' : 'flex'}">${type === 'movie' ? '🎬' : '📺'}</div>`;
+    
     return `
-      <div class="fallback" style="background: linear-gradient(160deg, ${c1}, ${c2});">
-        <span class="year">${year || ''}</span>
-        <span class="icon">${isMovie ? '🎬' : '📺'}</span>
+      <div class="grid-card ${isSelected ? 'selected' : ''}" 
+           data-id="${item.id}" 
+           data-type="${type}" 
+           data-title="${title.replace(/'/g, "\\'")}">
+        ${posterHtml}
         <div class="title">${title}</div>
       </div>
     `;
   }
 
-  function createGridCard(item, isSelected, type, source) {
-    const title = item.title || 'Unknown';
-    const year = item.year || '';
-    const posterPath = item.poster_path;
-    const itemType = type;
-    const isMovie = itemType === 'movie';
-    
-    let imgHtml = '';
-    if (posterPath) {
-      imgHtml = `<img src="${getPosterUrl(posterPath, 'w185')}" 
-                       onerror="this.parentElement.innerHTML = \`${createFallbackCard(title, year, itemType)}\`">`;
-    } else {
-      imgHtml = createFallbackCard(title, year, itemType);
-    }
-    
-    return `
-      <div class="grid-card ${isSelected ? 'selected' : ''}" 
-           data-id="${item.id}" 
-           data-type="${itemType}" 
-           data-title="${title.replace(/'/g, "\\'")}"
-           data-poster="${posterPath || ''}">
-        ${imgHtml}
-      </div>
-    `;
-  }
-
   function renderGrids() {
-    moviesGrid.innerHTML = allMovies.map(movie => 
-      createGridCard(movie, selectedMovies.some(m => m.id === movie.id), 'movie', 'stremio')
-    ).join('');
+    moviesGrid.innerHTML = allMovies.map(m => createCard(m, selectedMovies.some(sm => sm.id === m.id))).join('');
+    seriesGrid.innerHTML = allSeries.map(s => createCard(s, selectedSeries.some(ss => ss.id === s.id))).join('');
+    continueGrid.innerHTML = continueWatching.map(cw => createCard(cw, true)).join('');
     
-    seriesGrid.innerHTML = allSeries.map(series => 
-      createGridCard(series, selectedSeries.some(s => s.id === series.id), 'series', 'stremio')
-    ).join('');
-    
-    continueGrid.innerHTML = continueWatching.map(cw => 
-      createGridCard(cw, true, cw.type, 'continue')
-    ).join('');
-    
-    // Add click handlers
+    // Movie click handlers
     document.querySelectorAll('#moviesGrid .grid-card').forEach(card => {
       card.onclick = () => {
         const id = card.dataset.id;
@@ -225,6 +197,7 @@
       };
     });
     
+    // Series click handlers
     document.querySelectorAll('#seriesGrid .grid-card').forEach(card => {
       card.onclick = () => {
         const id = card.dataset.id;
@@ -240,24 +213,6 @@
         updateCounters();
       };
     });
-  }
-
-  function updateCounters() {
-    movieCountSpan.innerText = selectedMovies.length;
-    seriesCountSpan.innerText = selectedSeries.length;
-    if (selectedMovies.length >= 5 && selectedSeries.length >= 5) {
-      generateBtn.disabled = false;
-      generateBtn.style.background = '#ffb347';
-    } else {
-      generateBtn.disabled = true;
-      generateBtn.style.background = '#555';
-    }
-  }
-
-  function copyToClipboard() {
-    const url = document.getElementById('manifestUrl').innerText;
-    navigator.clipboard.writeText(url);
-    alert('Link copied!');
   }
 
   loginBtn.onclick = async () => {
@@ -276,14 +231,13 @@
       });
       
       const data = await response.json();
-      
       if (!data.success) throw new Error(data.error || 'Login failed');
       
       allMovies = data.library.filter(item => item.type === 'movie');
       allSeries = data.library.filter(item => item.type === 'series');
       continueWatching = data.continueWatching || [];
       
-      // Auto-select continue watching items
+      // Auto-select continue watching
       for (const cw of continueWatching) {
         if (cw.type === 'movie' && !selectedMovies.find(m => m.id === cw.id)) {
           selectedMovies.push({ id: cw.id, title: cw.title, tmdb_id: cw.id, type: 'movie' });
@@ -292,7 +246,7 @@
         }
       }
       
-      loginStatus.innerHTML = `<div class="status success">✅ Imported ${allMovies.length} movies & ${allSeries.length} series! Click on posters to select your favorites.</div>`;
+      loginStatus.innerHTML = `<div class="status success">✅ Imported ${allMovies.length} movies & ${allSeries.length} series!</div>`;
       langSection.style.display = 'block';
       selectionSection.style.display = 'block';
       
@@ -300,7 +254,7 @@
       updateCounters();
       
     } catch (err) {
-      loginStatus.innerHTML = `<div class="status error">❌ Error: ${err.message}<br>Make sure your Stremio credentials are correct.</div>`;
+      loginStatus.innerHTML = `<div class="status error">❌ Error: ${err.message}</div>`;
     } finally {
       loginBtn.disabled = false;
       loginBtn.innerHTML = '🦝 Import My Library';
@@ -330,14 +284,12 @@
   
   generateBtn.onclick = async () => {
     if (selectedMovies.length < 5 || selectedSeries.length < 5) {
-      alert(`Please select at least 5 movies and 5 series.\nCurrently: ${selectedMovies.length} movies, ${selectedSeries.length} series`);
+      alert(`Select at least 5 movies and 5 series. Currently: ${selectedMovies.length} movies, ${selectedSeries.length} series`);
       return;
     }
     
     generateBtn.disabled = true;
-    generateBtn.innerHTML = '🦝 Generating Racoonmendations <span class="loader"></span>';
-    
-    const prefs = document.getElementById('prefs').value;
+    generateBtn.innerHTML = '🦝 Generating <span class="loader"></span>';
     
     try {
       const response = await fetch('/api/save-config', {
@@ -349,18 +301,16 @@
           selectedSeries,
           selectedAnime: [],
           language: selectedLanguage,
-          prefs,
+          prefs: document.getElementById('prefs').value,
           existingUuid: userUuid
         })
       });
       
       const data = await response.json();
-      
       if (data.success) {
         document.getElementById('manifestUrl').innerText = data.manifestUrl;
         document.getElementById('result').style.display = 'block';
         userUuid = data.userUuid;
-        document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
       } else {
         alert('Error saving configuration');
       }
