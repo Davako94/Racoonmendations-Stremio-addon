@@ -2,6 +2,7 @@ const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
 const { getUserLanguage, getUserLibrary } = require('../services/userStore');
 
+// Cache estesa per le operazioni pesanti: 48 ore (172800 secondi)
 const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ function scoreCandidate(candidate, seed) {
   score += networkOverlap * 30;
   score += creatorOverlap * 50;
 
-  // Penalità ridotta e condizionale (fix: era -100 fisso, eliminava buoni candidati)
+  // Penalità ridotta e condizionale
   if (genreOverlap === 0 && keywordOverlap === 0 && !isFromPrimary) score -= 80;
   else if (genreOverlap === 0 && isFromPrimary) score -= 20;
 
@@ -49,9 +50,9 @@ function scoreCandidate(candidate, seed) {
   return { ...candidate, score, keywordOverlap, genreOverlap };
 }
 
-// ─── buildCandidates: simili a UN singolo seedId ─────────────────────────────
+// ─── buildCandidates: simili a UN singolo seedId (Legacy/Dinamico) ───────────
 async function buildCandidates(mediaType, rawSeedId, language) {
-  console.log(`🎯 buildCandidates → ${rawSeedId}`);
+  console.log(`🎯 buildCandidates → TMDB ID: ${rawSeedId}`);
 
   const metadata = await tmdb.getFullDetails(mediaType, rawSeedId, language);
   if (!metadata) {
@@ -59,7 +60,8 @@ async function buildCandidates(mediaType, rawSeedId, language) {
     return [];
   }
 
-  console.log(`   ✅ Seed: "${metadata.title}" (TMDB: ${metadata.id})`);
+  const displayName = metadata.title || metadata.name || 'Unknown';
+  console.log(`   ✅ Seed: "${displayName}" (TMDB: ${metadata.id})`);
   console.log(`   Keywords: ${metadata.keywords.slice(0, 5).map(k => k.name).join(', ')}`);
   console.log(`   Genres:   ${metadata.genres.map(g => g.name).join(', ')}`);
 
@@ -125,7 +127,7 @@ async function buildCandidates(mediaType, rawSeedId, language) {
 
   console.log(`   Candidati grezzi: ${candidates.length}`);
 
-  // Fetch details in parallelo (fix: era sequenziale → timeout)
+  // Fetch details in parallelo (max 80)
   const pool = candidates.slice(0, 80);
   const detailsList = await tmdb.getDetailsBatch(mediaType, pool.map(c => c.id), language, 8);
 
@@ -141,31 +143,29 @@ async function buildCandidates(mediaType, rawSeedId, language) {
 
   console.log(`   Finali: ${final.length}`);
   final.forEach(c =>
-    console.log(`     "${c.title}" score:${Math.round(c.score)} kw:${c.keywordOverlap} src:${c._source}`)
+    console.log(`     "${c.title || c.name}" score:${Math.round(c.score)} kw:${c.keywordOverlap} src:${c._source}`)
   );
 
   return final;
 }
 
 // ─── buildPersonalizedRecs: cuore del sistema Netflix-like ───────────────────
-// Prende TUTTI i titoli scelti dall'utente nel configure,
-// ne estrae keyword/genre/network frequenti e fa discover personalizzato.
-async function buildPersonalizedRecs(mediaType, userUuid, language) {
-  console.log(`🧠 buildPersonalizedRecs → user: ${userUuid}, type: ${mediaType}`);
+async function buildPersonalizedRecs(libraryType, tmdbType, userUuid, language) {
+  console.log(`🧠 buildPersonalizedRecs → user: ${userUuid}, libType: ${libraryType}, tmdbType: ${tmdbType}`);
 
-  // getUserLibrary restituisce i titoli scelti dall'utente durante il setup
-  const libraryItems = await getUserLibrary(userUuid, mediaType);
+  // Chiediamo al db i salvataggi specifici ('movie', 'series' o 'anime')
+  const libraryItems = await getUserLibrary(userUuid, libraryType);
 
-  if (!libraryItems.length) {
+  if (!libraryItems || !libraryItems.length) {
     console.log('   Libreria vuota → fallback popular');
-    return await tmdb.getPopular(mediaType, language, 2);
+    return await tmdb.getPopular(tmdbType, language, 2);
   }
 
-  console.log(`   Titoli in libreria: ${libraryItems.length}`);
+  console.log(`   Titoli in libreria (${libraryType}): ${libraryItems.length}`);
 
-  // Ottieni full details per TUTTI i seed (in parallelo, max 8 alla volta)
+  // Ottieni full details per TUTTI i seed
   const detailsList = await Promise.allSettled(
-    libraryItems.map(item => tmdb.getFullDetails(mediaType, item.id, language))
+    libraryItems.map(item => tmdb.getFullDetails(tmdbType, item.id, language))
   );
 
   const validSeeds = detailsList
@@ -176,11 +176,10 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
 
   if (!validSeeds.length) {
     console.log('   Nessun seed valido → fallback popular');
-    return await tmdb.getPopular(mediaType, language, 2);
+    return await tmdb.getPopular(tmdbType, language, 2);
   }
 
   // ── Costruisci profilo utente aggregato ───────────────────────────────────
-  // Conta frequenza di keyword/genre/network tra tutti i titoli scelti
   const keywordFreq = {};
   const genreFreq   = {};
   const networkFreq = {};
@@ -193,7 +192,6 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
     for (const nId of seed.networkIds)     networkFreq[nId]  = (networkFreq[nId]  || 0) + 1;
   }
 
-  // Top per frequenza
   const topKeywords = Object.entries(keywordFreq)
     .sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id]) => Number(id));
   const topGenres = Object.entries(genreFreq)
@@ -211,11 +209,10 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
 
   const addToMap = (items, bonus) => {
     for (const item of items) {
-      if (libraryIds.has(item.id)) continue; // escludi titoli già in libreria
+      if (libraryIds.has(item.id)) continue; 
       if (!candidateMap.has(item.id)) {
         candidateMap.set(item.id, { ...item, _scoreBonus: bonus, _source: 'personalized' });
       } else {
-        // Accumula bonus se appare in più query
         candidateMap.get(item.id)._scoreBonus += Math.round(bonus * 0.4);
       }
     }
@@ -223,13 +220,13 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
 
   const discoverResults = await Promise.allSettled([
     topKeywords.length
-      ? tmdb.discover(mediaType, { with_keywords: topKeywords.join(',') }, language, 2)
+      ? tmdb.discover(tmdbType, { with_keywords: topKeywords.join(',') }, language, 2)
       : Promise.resolve([]),
     topGenres.length
-      ? tmdb.discover(mediaType, { with_genres: topGenres.join(','), sort_by: 'vote_average.desc' }, language, 2)
+      ? tmdb.discover(tmdbType, { with_genres: topGenres.join(','), sort_by: 'vote_average.desc' }, language, 2)
       : Promise.resolve([]),
-    topNetworks.length && mediaType === 'tv'
-      ? tmdb.discover(mediaType, { with_networks: topNetworks.join('|') }, language, 1)
+    topNetworks.length && tmdbType === 'tv'
+      ? tmdb.discover(tmdbType, { with_networks: topNetworks.join('|') }, language, 1)
       : Promise.resolve([])
   ]);
 
@@ -252,7 +249,7 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
 
   const pool = candidates.slice(0, 60);
   const detailsForPool = await tmdb.getDetailsBatch(
-    mediaType, pool.map(c => c.id), language, 8
+    tmdbType, pool.map(c => c.id), language, 8
   );
 
   const scored = [];
@@ -269,73 +266,87 @@ async function buildPersonalizedRecs(mediaType, userUuid, language) {
   return final;
 }
 
-// ─── getCatalog: entry point principale ──────────────────────────────────────
-async function getCatalog(catalogType, catalogId) {
-  console.log(`\n📺 getCatalog: type="${catalogType}" id="${catalogId}"`);
+// ─── getCatalog: Entry Point Principale (Connesso a index.js) ────────────────
+async function getCatalog(catalogType, catalogId, userUuid) {
+  console.log(`\n📺 getCatalog: type="${catalogType}", id="${catalogId}", uuid="${userUuid}"`);
 
-  const parts = catalogId.split('-');
-  const prefix = parts[0];
-  const mediaType = parts[1];
-  let seedId   = null;
-  let userUuid = null;
-
-  if (prefix === 'sim') {
-    seedId   = parts[2];
-    userUuid = parts.slice(3).join('-');
-  } else if (prefix === 'rec') {
-    userUuid = parts.slice(2).join('-');
-  } else if (prefix === 'setup') {
+  // Gestione Utente non configurato
+  if (!userUuid) {
     return [{
       id: 'setup_placeholder',
       type: catalogType,
-      name: '⚠️ Configura il tuo addon',
+      name: '⚠️ Setup Required',
       poster: null,
-      description: 'Vai su /configure per selezionare i tuoi film e serie preferiti',
+      description: 'Open addon configuration to select your favorite titles.',
       releaseInfo: '',
       extra: {}
     }];
   }
 
-  if (!userUuid) return [];
-
-  const cacheKey = `${catalogId}:${userUuid}`;
+  const cacheKey = `${catalogType}:${catalogId}:${userUuid}`;
   const cached = cache.get(cacheKey);
   if (cached) {
     console.log(`   ✅ Cache hit: ${cached.length} items`);
     return cached;
   }
 
-  const language = await getUserLanguage(userUuid);
+  // Otteniamo la lingua (default: en)
+  let language = 'en';
+  try { language = await getUserLanguage(userUuid) || 'en'; } catch(e) {}
+  
   let items = [];
 
-  if (prefix === 'sim' && seedId) {
-    // Simili a un titolo specifico
-    items = await buildCandidates(mediaType, seedId, language);
+  // Routing basato sull'ID del catalogo (Manifest)
+  try {
+    if (catalogId === 'raccon-movies') {
+      items = await buildPersonalizedRecs('movie', 'movie', userUuid, language);
+    } else if (catalogId === 'raccon-series') {
+      items = await buildPersonalizedRecs('series', 'tv', userUuid, language);
+    } else if (catalogId === 'raccon-anime') {
+      // Per gli anime cerchiamo i salvataggi 'anime' ma li passiamo a TMDB come 'tv'
+      items = await buildPersonalizedRecs('anime', 'tv', userUuid, language);
+    } 
+    // Fallback Legacy (es. sim-movie-12345)
+    else if (catalogId.startsWith('sim-')) {
+      const parts = catalogId.split('-');
+      const mediaType = parts[1]; // 'movie' o 'tv'
+      const seedId = parts[2];
+      items = await buildCandidates(mediaType, seedId, language);
+    }
 
-  } else if (prefix === 'rec') {
-    // Raccomandazioni personalizzate dalla libreria utente
-    items = await buildPersonalizedRecs(mediaType, userUuid, language);
+    // Fallback assoluto: se il motore non trova nulla, mostra roba popolare
+    if (!items || !items.length) {
+      console.log('   ⚠️ Nessun risultato dal motore → fallback popular');
+      const tmdbType = catalogType === 'series' ? 'tv' : 'movie';
+      items = await tmdb.getPopular(tmdbType, language, 1);
+    }
+  } catch (err) {
+    console.error('   ❌ Errore durante la generazione catalogo:', err);
+    items = [];
   }
 
-  // Fallback
-  if (!items.length) {
-    console.log('   ⚠️ Nessun risultato → fallback popular');
-    items = await tmdb.getPopular(mediaType || catalogType, language, 1);
-  }
+  // Formattazione per Stremio
+  const metas = (items || []).map(item => {
+    // TMDB usa title per i film, name per serie/anime
+    const displayName = item.title || item.name || 'Unknown';
+    // Estrazione anno di uscita
+    const dateField = item.release_date || item.first_air_date;
+    const year = dateField ? dateField.split('-')[0] : '';
 
-  const metas = items.map(item => ({
-    id: `tmdb:${item.id}`,
-    type: mediaType || catalogType,
-    name: item.title,
-    poster: item.poster_path
-      ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
-      : null,
-    description: item.overview || '',
-    releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
-    extra: {}
-  }));
+    return {
+      id: `tmdb:${item.id}`,
+      type: catalogType, // Manteniamo la tipologia che Stremio si aspetta (movie/series)
+      name: displayName,
+      poster: item.poster_path
+        ? `https://image.tmdb.org/t/p/w342${item.poster_path}`
+        : null,
+      description: item.overview || '',
+      releaseInfo: year,
+      extra: {}
+    };
+  });
 
-  console.log(`✅ Generati ${metas.length} items`);
+  console.log(`✅ Generati ${metas.length} metas per il catalogo`);
   cache.set(cacheKey, metas);
   return metas;
 }
@@ -343,7 +354,7 @@ async function getCatalog(catalogType, catalogId) {
 function invalidateCache(userUuid) {
   const keys = cache.keys().filter(k => k.includes(userUuid));
   cache.del(keys);
-  console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} entries`);
+  console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} entries rimosse`);
 }
 
 module.exports = { getCatalog, invalidateCache };
