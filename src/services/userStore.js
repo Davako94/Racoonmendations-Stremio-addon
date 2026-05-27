@@ -29,12 +29,12 @@ async function getUserConfig(uuid) {
 async function getUserSeeds(uuid, catalogType) {
   const config = await getUserConfig(uuid);
   if (!config) return [];
-  
+
   let seeds = [];
   if (catalogType === 'movie') seeds = config.selected_movies || [];
   else if (catalogType === 'series') seeds = config.selected_series || [];
   else if (catalogType === 'anime') seeds = config.selected_anime || [];
-  
+
   return seeds.map(s => ({ ...s, type: catalogType }));
 }
 
@@ -53,4 +53,28 @@ async function updateUserSeeds(uuid, catalogType, seeds) {
   await supabase.from('user_configs').update(update).eq('uuid', uuid);
 }
 
-module.exports = { saveUserConfig, getUserConfig, getUserSeeds, getUserLanguage, updateUserSeeds };
+// ─── NUOVO ────────────────────────────────────────────────────────────────────
+// Restituisce i titoli scelti dall'utente durante il setup come "libreria base"
+// per alimentare il motore di raccomandazioni personalizzate.
+// Normalizza il campo ID: accetta sia { tmdbId } che { id } che { imdbId }.
+async function getUserLibrary(uuid, catalogType) {
+  const seeds = await getUserSeeds(uuid, catalogType);
+
+  return seeds
+    .map(s => ({
+      // Risolvi l'ID nel formato più probabile salvato dal configure
+      id: s.tmdbId || s.id || s.imdbId || null,
+      title: s.title || s.name || null,
+      type: catalogType
+    }))
+    .filter(s => s.id !== null);
+}
+
+module.exports = {
+  saveUserConfig,
+  getUserConfig,
+  getUserSeeds,
+  getUserLanguage,
+  updateUserSeeds,
+  getUserLibrary      // ← esportata
+};
