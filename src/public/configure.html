@@ -2,738 +2,271 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>Racconmendations - Configure Your Addon</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Racoonmendations</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root{
+      --a:#ffb347;--ag:rgba(255,179,71,.14);
+      --bg:#07090f;--s1:#0d1118;--s2:#111822;--s3:#19222f;
+      --bd:rgba(255,179,71,.11);--bdh:rgba(255,179,71,.42);
+      --tx:#dde2ec;--mu:#68778f;--r:16px;
     }
-
-    body {
-      background: linear-gradient(135deg, #0a0f1a 0%, #0c1320 100%);
-      color: #eef0f8;
-      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, sans-serif;
-      padding: 1rem;
-      min-height: 100vh;
-    }
-
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    /* Header */
-    .header {
-      text-align: center;
-      padding: 2rem 1rem;
-      background: rgba(20, 26, 36, 0.6);
-      backdrop-filter: blur(10px);
-      border-radius: 32px;
-      margin-bottom: 2rem;
-      border: 1px solid rgba(255, 180, 71, 0.2);
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin-bottom: 1rem;
-    }
-
-    .logo-icon {
-      font-size: 3rem;
-      filter: drop-shadow(0 4px 12px rgba(255, 180, 71, 0.3));
-    }
-
-    h1 {
-      font-size: 2.5rem;
-      font-weight: 800;
-      background: linear-gradient(135deg, #ffb347 0%, #ff8c00 100%);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      letter-spacing: -0.5px;
-    }
-
-    .tagline {
-      color: #8a99b4;
-      font-size: 1rem;
-      margin-top: 0.5rem;
-    }
-
-    /* Cards */
-    .card {
-      background: rgba(20, 26, 36, 0.8);
-      backdrop-filter: blur(10px);
-      border-radius: 24px;
-      padding: 1.5rem;
-      margin-bottom: 1.5rem;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      transition: all 0.3s ease;
-    }
-
-    .card:hover {
-      border-color: rgba(255, 180, 71, 0.3);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-
-    .card-title {
-      font-size: 1.25rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #ffb347;
-    }
-
-    .card-title span {
-      font-size: 1.5rem;
-    }
-
-    /* Inputs */
-    input, textarea, select {
-      width: 100%;
-      padding: 0.875rem 1rem;
-      background: rgba(30, 42, 58, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      color: #eef0f8;
-      font-size: 0.95rem;
-      transition: all 0.2s ease;
-    }
-
-    input:focus, textarea:focus, select:focus {
-      outline: none;
-      border-color: #ffb347;
-      box-shadow: 0 0 0 3px rgba(255, 180, 71, 0.1);
-    }
-
-    input::placeholder, textarea::placeholder {
-      color: #4a5a72;
-    }
-
-    /* Buttons */
-    .btn {
-      padding: 0.875rem 1.5rem;
-      border-radius: 40px;
-      font-weight: 600;
-      font-size: 0.95rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: none;
-      font-family: inherit;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #ffb347 0%, #ff8c00 100%);
-      color: #0a0f1a;
-      width: 100%;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(255, 140, 0, 0.3);
-    }
-
-    .btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .btn-secondary {
-      background: rgba(45, 62, 79, 0.8);
-      color: #eef0f8;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .btn-secondary:hover {
-      background: rgba(45, 62, 79, 1);
-    }
-
-    .btn-small {
-      padding: 0.4rem 0.8rem;
-      font-size: 0.8rem;
-      width: auto;
-    }
-
-    /* Grids */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-      gap: 1rem;
-      margin-top: 1rem;
-      max-height: 450px;
-      overflow-y: auto;
-      padding: 0.25rem;
-    }
-
-    .grid-card {
-      background: rgba(30, 42, 58, 0.6);
-      border-radius: 16px;
-      overflow: hidden;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: 2px solid transparent;
-      text-align: center;
-    }
-
-    .grid-card:hover {
-      transform: translateY(-4px);
-      background: rgba(45, 62, 79, 0.8);
-    }
-
-    .grid-card.selected {
-      border-color: #ffb347;
-      background: rgba(255, 180, 71, 0.15);
-      transform: scale(0.98);
-    }
-
-    .grid-card img {
-      width: 100%;
-      aspect-ratio: 2/3;
-      object-fit: cover;
-      display: block;
-    }
-
-    .grid-card .no-poster {
-      width: 100%;
-      aspect-ratio: 2/3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #1a1a2e, #16213e);
-      font-size: 2rem;
-    }
-
-    .grid-card .title {
-      font-size: 0.7rem;
-      padding: 0.5rem;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-weight: 500;
-    }
-
-    /* Language selector */
-    .language-selector {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-      margin-top: 0.5rem;
-    }
-
-    .lang-btn {
-      background: rgba(30, 42, 58, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 40px;
-      padding: 0.5rem 1rem;
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition: all 0.2s;
-    }
-
-    .lang-btn:hover {
-      background: rgba(45, 62, 79, 1);
-    }
-
-    .lang-btn.active {
-      background: #ffb347;
-      color: #0a0f1a;
-      border-color: #ffb347;
-    }
-
-    /* Status */
-    .status {
-      padding: 0.75rem 1rem;
-      border-radius: 16px;
-      margin-top: 1rem;
-      font-size: 0.85rem;
-    }
-
-    .status.success {
-      background: rgba(46, 204, 113, 0.15);
-      border-left: 4px solid #2ecc71;
-    }
-
-    .status.error {
-      background: rgba(231, 76, 60, 0.15);
-      border-left: 4px solid #e74c3c;
-    }
-
-    .status.info {
-      background: rgba(52, 152, 219, 0.15);
-      border-left: 4px solid #3498db;
-    }
-
-    /* Result */
-    .result {
-      margin-top: 2rem;
-      background: rgba(15, 18, 25, 0.9);
-      padding: 1.5rem;
-      border-radius: 24px;
-      text-align: center;
-      border: 1px solid rgba(255, 180, 71, 0.3);
-    }
-
-    .install-link {
-      background: #0a0f1a;
-      padding: 1rem;
-      border-radius: 16px;
-      word-break: break-all;
-      font-family: monospace;
-      font-size: 0.85rem;
-      margin: 1rem 0;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-
-    .copy-btn {
-      background: #ffb347;
-      border: none;
-      border-radius: 40px;
-      padding: 0.5rem 1.5rem;
-      cursor: pointer;
-      font-weight: 600;
-      margin-top: 0.5rem;
-      width: auto;
-      display: inline-block;
-    }
-
-    .flex-between {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 1rem;
-    }
-
-    .count-badge {
-      background: #ffb347;
-      color: #0a0f1a;
-      border-radius: 40px;
-      padding: 0.2rem 0.6rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      margin-left: 0.5rem;
-    }
-
-    .loader {
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      border: 2px solid #fff;
-      border-radius: 50%;
-      border-top-color: #ffb347;
-      animation: spin 0.6s linear infinite;
-      margin-left: 8px;
-      vertical-align: middle;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* Toast */
-    .toast-container {
-      position: fixed;
-      bottom: 20px;
-      right: 20px;
-      z-index: 1000;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .toast {
-      background: #1e2a3a;
-      border-left: 4px solid #ffb347;
-      border-radius: 12px;
-      padding: 0.75rem 1rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      animation: slideIn 0.3s ease;
-      font-size: 0.85rem;
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateX(100%);
-        opacity: 0;
-      }
-      to {
-        transform: translateX(0);
-        opacity: 1;
-      }
-    }
-
-    /* Scrollbar */
-    .grid::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .grid::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 3px;
-    }
-
-    .grid::-webkit-scrollbar-thumb {
-      background: #ffb347;
-      border-radius: 3px;
-    }
-
-    /* Footer */
-    .footer {
-      text-align: center;
-      margin-top: 2rem;
-      padding: 1rem;
-      color: #4a5a72;
-      font-size: 0.75rem;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      body {
-        padding: 0.5rem;
-      }
-      
-      h1 {
-        font-size: 1.75rem;
-      }
-      
-      .logo-icon {
-        font-size: 2rem;
-      }
-      
-      .grid {
-        grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
-        gap: 0.75rem;
-      }
-      
-      .card {
-        padding: 1rem;
-      }
-    }
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:var(--bg);color:var(--tx);font-family:"Outfit",system-ui,sans-serif;
+      font-size:15px;min-height:100vh;padding:2rem 1rem 5rem}
+    body::before{content:"";position:fixed;inset:0;
+      background:radial-gradient(ellipse 70% 50% at 50% -10%,rgba(168,85,247,.09) 0%,transparent 60%),
+                 radial-gradient(ellipse 50% 30% at 80% 100%,rgba(255,140,0,.06) 0%,transparent 60%);
+      pointer-events:none;z-index:0}
+    .wrap{position:relative;z-index:1;max-width:800px;margin:0 auto}
+    .hero{display:flex;flex-direction:column;align-items:center;gap:.9rem;padding:2.5rem 0 3rem;text-align:center}
+    .logo-shell{width:110px;height:110px;border-radius:50%;padding:3px;
+      background:conic-gradient(from 220deg,#ffb347,#ff6b6b 30%,#a855f7 55%,#3b82f6 75%,#ffb347);
+      box-shadow:0 0 40px rgba(255,140,0,.3),0 0 80px rgba(168,85,247,.12)}
+    .logo-shell img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+    .hero h1{font-size:2.2rem;font-weight:800;letter-spacing:-.03em;
+      background:linear-gradient(135deg,#fff 10%,#ffb347 45%,#ff8c00 65%,#ffb347 85%);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero p{color:var(--mu);font-size:.93rem;max-width:400px;line-height:1.5}
+    .step-tag{display:inline-flex;align-items:center;gap:.45rem;font-size:.7rem;font-weight:700;
+      letter-spacing:.1em;text-transform:uppercase;color:var(--a);margin-bottom:.8rem}
+    .step-tag .n{width:19px;height:19px;border-radius:50%;background:var(--ag);
+      border:1.5px solid var(--a);display:flex;align-items:center;justify-content:center;font-size:.62rem}
+    .card{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);
+      padding:1.4rem 1.5rem;margin-bottom:1.1rem;transition:border-color .2s}
+    .card:focus-within{border-color:rgba(255,179,71,.25)}
+    .ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+    .ct{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:.55rem}
+    .pill{background:var(--ag);color:var(--a);border:1px solid rgba(255,179,71,.28);
+      border-radius:40px;padding:.12rem .55rem;font-size:.72rem;font-weight:600}
+    .field{margin-bottom:.8rem}
+    .field label{display:block;font-size:.72rem;font-weight:600;color:var(--mu);
+      margin-bottom:.38rem;letter-spacing:.05em;text-transform:uppercase}
+    input[type=email],input[type=password],textarea{
+      width:100%;background:var(--s2);border:1px solid var(--bd);border-radius:10px;color:var(--tx);
+      font-family:inherit;font-size:.95rem;padding:.72rem 1rem;outline:none;
+      transition:border-color .2s,box-shadow .2s}
+    input:focus,textarea:focus{border-color:rgba(255,179,71,.5);box-shadow:0 0 0 3px rgba(255,179,71,.07)}
+    textarea{resize:vertical;min-height:76px}
+    .btn-p{display:flex;align-items:center;justify-content:center;gap:.5rem;width:100%;
+      background:linear-gradient(135deg,#ffb347,#ff8c00);color:#06090e;border:none;
+      border-radius:40px;font-family:inherit;font-weight:700;font-size:1rem;padding:.88rem;
+      cursor:pointer;transition:all .2s;box-shadow:0 4px 22px rgba(255,140,0,.28);margin-top:.5rem}
+    .btn-p:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 7px 30px rgba(255,140,0,.42)}
+    .btn-p:disabled{opacity:.38;cursor:not-allowed;transform:none;box-shadow:none}
+    .btn-g{background:transparent;border:1px solid var(--bd);color:var(--mu);border-radius:40px;
+      font-family:inherit;font-size:.76rem;font-weight:500;padding:.32rem .8rem;cursor:pointer;transition:all .2s}
+    .btn-g:hover{border-color:var(--bdh);color:var(--tx)}
+    .lang-row{display:flex;gap:.45rem;flex-wrap:wrap}
+    .lb{background:var(--s2);border:1px solid var(--bd);border-radius:40px;color:var(--mu);
+      font-family:inherit;font-size:.82rem;font-weight:500;padding:.42rem .95rem;cursor:pointer;transition:all .2s}
+    .lb:hover{border-color:var(--bdh);color:var(--tx)}
+    .lb.on{background:var(--ag);border-color:var(--a);color:var(--a)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:.7rem;
+      max-height:360px;overflow-y:auto;padding:.2rem .05rem .05rem;
+      scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
+    .grid::-webkit-scrollbar{width:4px}
+    .grid::-webkit-scrollbar-thumb{background:var(--bd);border-radius:4px}
+    .gc{position:relative;background:var(--s3);border-radius:9px;overflow:hidden;
+      cursor:pointer;border:2px solid transparent;transition:all .18s}
+    .gc:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.45)}
+    .gc.on{border-color:var(--a);box-shadow:0 0 0 1px rgba(255,179,71,.25)}
+    .gc.on::after{content:"\2713";position:absolute;top:4px;right:5px;width:17px;height:17px;
+      background:var(--a);color:#06090e;border-radius:50%;font-size:.62rem;font-weight:900;
+      display:flex;align-items:center;justify-content:center;line-height:17px;text-align:center}
+    .gc img{width:100%;aspect-ratio:2/3;object-fit:cover;display:block}
+    .np{width:100%;aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;
+      background:linear-gradient(135deg,var(--bg),var(--s3));font-size:1.7rem}
+    .gt{font-size:.64rem;font-weight:500;padding:.32rem .38rem;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--tx)}
+    .st{padding:.8rem 1rem;border-radius:10px;font-size:.86rem;margin-top:.8rem}
+    .st.ok{background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.18);color:#86efac}
+    .st.err{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);color:#fca5a5}
+    .sp{display:inline-block;width:15px;height:15px;border:2.5px solid rgba(0,0,0,.25);
+      border-top-color:#06090e;border-radius:50%;animation:rot .65s linear infinite}
+    @keyframes rot{to{transform:rotate(360deg)}}
+    .res{background:var(--s1);border:1px solid rgba(34,197,94,.28);border-radius:var(--r);
+      padding:1.4rem;margin-top:1.4rem}
+    .res h3{font-size:.95rem;font-weight:600;color:#86efac;margin-bottom:.65rem}
+    .mu-url{background:var(--bg);border:1px solid var(--bd);border-radius:10px;
+      padding:.7rem 1rem;font-family:monospace;font-size:.76rem;word-break:break-all;
+      color:var(--mu);margin:.7rem 0}
+    .cp{display:inline-flex;align-items:center;gap:.38rem;background:rgba(34,197,94,.1);
+      border:1px solid rgba(34,197,94,.28);border-radius:40px;color:#86efac;
+      font-family:inherit;font-size:.8rem;font-weight:600;padding:.4rem .95rem;cursor:pointer;transition:all .2s}
+    .cp:hover{background:rgba(34,197,94,.18)}
+    .ft{text-align:center;color:var(--mu);font-size:.76rem;margin-top:3rem}
+    @media(max-width:480px){.grid{grid-template-columns:repeat(auto-fill,minmax(74px,1fr))}.hero h1{font-size:1.75rem}}
   </style>
 </head>
 <body>
-<div class="container">
-  <!-- Header -->
-  <div class="header">
-    <div class="logo">
-      <span class="logo-icon">🦝</span>
-      <h1>Racconmendations</h1>
-      <span class="logo-icon">🎬</span>
+<div class="wrap">
+  <div class="hero">
+    <div class="logo-shell">
+      <img src="data:image/webp;base64,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" alt="Racoonmendations">
     </div>
-    <p class="tagline">Click on posters to select your favorite movies & series.<br>The raccoon will recommend similar titles!</p>
+    <div>
+      <h1>Racoonmendations</h1>
+      <p>Your personal Stremio recommendation engine &mdash; powered by TMDB</p>
+    </div>
   </div>
 
-  <!-- Login Section -->
   <div class="card">
-    <div class="card-title">
-      <span>🔐</span> 1. Login to Stremio
-    </div>
-    <input type="email" id="email" placeholder="Stremio Email" autocomplete="off">
-    <input type="password" id="password" placeholder="Stremio Password" style="margin-top: 0.75rem;">
-    <button id="loginBtn" class="btn btn-primary" style="margin-top: 1rem;">🦝 Import My Library</button>
+    <div class="step-tag"><span class="n">1</span> Connect</div>
+    <div class="ch"><div class="ct">&#x1F512; Login to Stremio</div></div>
+    <div class="field"><label>Email</label><input type="email" id="email" placeholder="your@email.com" autocomplete="off"></div>
+    <div class="field"><label>Password</label><input type="password" id="password" placeholder="&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"></div>
+    <button class="btn-p" id="loginBtn">&#x1F99D; Import My Library</button>
     <div id="loginStatus"></div>
   </div>
 
-  <!-- Language Selection -->
-  <div class="card" id="langSection" style="display:none;">
-    <div class="card-title">
-      <span>🌐</span> 2. Choose Language
-    </div>
-    <div class="language-selector" id="languageSelector">
-      <button class="lang-btn" data-lang="en">🇬🇧 English</button>
-      <button class="lang-btn" data-lang="it">🇮🇹 Italiano</button>
-      <button class="lang-btn" data-lang="de">🇩🇪 Deutsch</button>
-      <button class="lang-btn" data-lang="es">🇪🇸 Español</button>
-      <button class="lang-btn" data-lang="fr">🇫🇷 Français</button>
+  <div class="card" id="langSection" style="display:none">
+    <div class="step-tag"><span class="n">2</span> Language</div>
+    <div class="ch"><div class="ct">&#x1F310; Interface language</div></div>
+    <div class="lang-row">
+      <button class="lb on" data-lang="en">&#x1F1EC;&#x1F1E7; English</button>
+      <button class="lb" data-lang="it">&#x1F1EE;&#x1F1F9; Italiano</button>
+      <button class="lb" data-lang="de">&#x1F1E9;&#x1F1EA; Deutsch</button>
+      <button class="lb" data-lang="es">&#x1F1EA;&#x1F1F8; Espa&ntilde;ol</button>
+      <button class="lb" data-lang="fr">&#x1F1EB;&#x1F1F7; Fran&ccedil;ais</button>
     </div>
   </div>
 
-  <!-- Library Selection Section -->
-  <div id="selectionSection" style="display:none;">
+  <div id="selectionSection" style="display:none">
     <div class="card">
-      <div class="flex-between">
-        <div class="card-title">
-          <span>🎥</span> 3. Select Your Favorite Movies
-          <span id="movieCount" class="count-badge">0</span>
-        </div>
-        <button id="clearMoviesBtn" class="btn btn-secondary btn-small">Clear</button>
+      <div class="step-tag"><span class="n">3</span> Your taste</div>
+      <div class="ch">
+        <div class="ct">&#x1F3AC; Favorite Movies <span class="pill" id="movieCount">0</span></div>
+        <button class="btn-g" id="clearMoviesBtn">Clear</button>
       </div>
       <div id="moviesGrid" class="grid"></div>
     </div>
-
     <div class="card">
-      <div class="flex-between">
-        <div class="card-title">
-          <span>📺</span> 4. Select Your Favorite Series
-          <span id="seriesCount" class="count-badge">0</span>
-        </div>
-        <button id="clearSeriesBtn" class="btn btn-secondary btn-small">Clear</button>
+      <div class="ch">
+        <div class="ct">&#x1F4FA; Favorite Series <span class="pill" id="seriesCount">0</span></div>
+        <button class="btn-g" id="clearSeriesBtn">Clear</button>
       </div>
       <div id="seriesGrid" class="grid"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">
-        <span>⏯️</span> 5. Continue Watching (auto-selected)
-      </div>
+      <div class="ch"><div class="ct">&#x23EF;&#xFE0F; Continue Watching <small style="color:var(--mu);font-weight:400;font-size:.8rem">auto-selected</small></div></div>
       <div id="continueGrid" class="grid"></div>
     </div>
-
     <div class="card">
-      <div class="card-title">
-        <span>⭐</span> Extra preferences (optional)
-      </div>
-      <textarea id="prefs" rows="2" placeholder="e.g., avoid horror, only post-2000, minimum rating 7"></textarea>
+      <div class="ch"><div class="ct">&#x2728; Extra preferences <small style="color:var(--mu);font-weight:400;font-size:.8rem">optional</small></div></div>
+      <textarea id="prefs" placeholder="e.g. avoid horror, only post-2000, min rating 7&hellip;"></textarea>
     </div>
-
-    <button id="generateBtn" class="btn btn-primary" disabled>✨ Generate Racconmendations Addon</button>
+    <button class="btn-p" id="generateBtn" disabled>&#x2728; Generate my Addon</button>
   </div>
 
-  <div id="result" class="result" style="display:none;">
-    <h3 style="color: #2ecc71; margin-bottom: 1rem;">✅ Addon Created Successfully!</h3>
-    <p><strong>📌 Install this link in Stremio:</strong></p>
-    <div class="install-link" id="manifestUrl"></div>
-    <button class="copy-btn" onclick="copyToClipboard()">📋 Copy Link to Clipboard</button>
-    <p style="margin-top: 1rem; font-size: 0.8rem; color: #8a99b4;">
-      💡 <strong>How to install:</strong> Open Stremio → Settings → Addons → Paste the link → Install
-    </p>
+  <div class="res" id="result" style="display:none">
+    <h3>&#x2705; Addon ready!</h3>
+    <p style="color:var(--mu);font-size:.86rem">Paste this link in Stremio &rarr; Add-ons &rarr; Install from URL:</p>
+    <div class="mu-url" id="manifestUrl"></div>
+    <button class="cp" id="cpBtn" onclick="copyLink()">&#x1F4CB; Copy link</button>
   </div>
 
-  <div class="footer">
-    🦝 Racconmendations • Powered by TMDB • Your data stays private
-  </div>
+  <div class="ft">&#x1F99D; Racoonmendations &nbsp;&middot;&nbsp; Powered by TMDB</div>
 </div>
-
-<div class="toast-container" id="toastContainer"></div>
-
 <script>
-  function showToast(message, type = 'info') {
-    const container = document.getElementById('toastContainer');
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.style.borderLeftColor = type === 'success' ? '#2ecc71' : type === 'error' ? '#e74c3c' : '#ffb347';
-    toast.innerHTML = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+  let allMovies=[],allSeries=[],continueWatching=[];
+  let selectedMovies=[],selectedSeries=[];
+  let selectedLanguage="en",userUuid=null;
+  const $=id=>document.getElementById(id);
+  function copyLink(){
+    navigator.clipboard.writeText($("manifestUrl").innerText);
+    const b=$("cpBtn");b.textContent="Copied!";
+    setTimeout(()=>{b.innerHTML="&#x1F4CB; Copy link";},2000);
   }
-
-  function copyToClipboard() {
-    const url = document.getElementById('manifestUrl').innerText;
-    navigator.clipboard.writeText(url);
-    showToast('Link copied to clipboard!', 'success');
+  function upd(){
+    $("movieCount").textContent=selectedMovies.length;
+    $("seriesCount").textContent=selectedSeries.length;
+    $("generateBtn").disabled=!(selectedMovies.length>=5&&selectedSeries.length>=5);
   }
-
-  let allMovies = [];
-  let allSeries = [];
-  let continueWatching = [];
-  let selectedMovies = [];
-  let selectedSeries = [];
-  let selectedLanguage = 'en';
-  let userUuid = null;
-
-  const loginBtn = document.getElementById('loginBtn');
-  const emailInput = document.getElementById('email');
-  const passwordInput = document.getElementById('password');
-  const loginStatus = document.getElementById('loginStatus');
-  const langSection = document.getElementById('langSection');
-  const selectionSection = document.getElementById('selectionSection');
-  const moviesGrid = document.getElementById('moviesGrid');
-  const seriesGrid = document.getElementById('seriesGrid');
-  const continueGrid = document.getElementById('continueGrid');
-  const movieCountSpan = document.getElementById('movieCount');
-  const seriesCountSpan = document.getElementById('seriesCount');
-  const generateBtn = document.getElementById('generateBtn');
-
-  function updateCounters() {
-    movieCountSpan.innerText = selectedMovies.length;
-    seriesCountSpan.innerText = selectedSeries.length;
-    generateBtn.disabled = !(selectedMovies.length >= 5 && selectedSeries.length >= 5);
-    if (!generateBtn.disabled) generateBtn.style.opacity = '1';
-    else generateBtn.style.opacity = '0.6';
+  function mkCard(item,sel){
+    const p=item.poster_path,t=(item.title||"Unknown").replace(/"/g,"&quot;");
+    const e=item.type==="movie"?"&#x1F3AC;":"&#x1F4FA;";
+    return '<div class="gc '+(sel?"on":"")+'" data-id="'+item.id+'" data-type="'+item.type+'" data-title="'+t+'">'
+      +(p?'<img src="'+p+'" loading="lazy" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">':'')
+      +'<div class="np" style="display:'+(p?"none":"flex")+'">'+e+'</div>'
+      +'<div class="gt">'+(item.title||"Unknown")+'</div></div>';
   }
-
-  function createCard(item, isSelected) {
-    const posterUrl = item.poster_path;
-    const title = item.title || 'Unknown';
-    const type = item.type;
-    
-    let posterHtml = '';
-    if (posterUrl) {
-      posterHtml = `<img src="${posterUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`;
-    }
-    posterHtml += `<div class="no-poster" style="display: ${posterUrl ? 'none' : 'flex'}">${type === 'movie' ? '🎬' : '📺'}</div>`;
-    
-    return `
-      <div class="grid-card ${isSelected ? 'selected' : ''}" 
-           data-id="${item.id}" 
-           data-type="${type}" 
-           data-title="${title.replace(/'/g, "\\'")}">
-        ${posterHtml}
-        <div class="title">${title}</div>
-      </div>
-    `;
-  }
-
-  function renderGrids() {
-    moviesGrid.innerHTML = allMovies.map(m => createCard(m, selectedMovies.some(sm => sm.id === m.id))).join('');
-    seriesGrid.innerHTML = allSeries.map(s => createCard(s, selectedSeries.some(ss => ss.id === s.id))).join('');
-    continueGrid.innerHTML = continueWatching.map(cw => createCard(cw, true)).join('');
-    
-    document.querySelectorAll('#moviesGrid .grid-card').forEach(card => {
-      card.onclick = () => {
-        const id = card.dataset.id;
-        const title = card.dataset.title;
-        const type = card.dataset.type;
-        const existing = selectedMovies.find(m => m.id === id);
-        if (existing) {
-          selectedMovies = selectedMovies.filter(m => m.id !== id);
-          showToast(`Removed "${title}"`, 'info');
-        } else {
-          selectedMovies.push({ id, title, tmdb_id: id, type });
-          showToast(`Added "${title}" to favorites`, 'success');
-        }
-        renderGrids();
-        updateCounters();
+  function render(){
+    $("moviesGrid").innerHTML=allMovies.map(m=>mkCard(m,selectedMovies.some(x=>x.id===m.id))).join("");
+    $("seriesGrid").innerHTML=allSeries.map(s=>mkCard(s,selectedSeries.some(x=>x.id===s.id))).join("");
+    $("continueGrid").innerHTML=continueWatching.map(c=>mkCard(c,true)).join("");
+    $("moviesGrid").querySelectorAll(".gc").forEach(c=>{
+      c.onclick=()=>{
+        const{id,title,type}=c.dataset;
+        const i=selectedMovies.findIndex(m=>m.id===id);
+        if(i>-1)selectedMovies.splice(i,1);else selectedMovies.push({id,title,tmdb_id:id,type});
+        render();upd();
       };
     });
-    
-    document.querySelectorAll('#seriesGrid .grid-card').forEach(card => {
-      card.onclick = () => {
-        const id = card.dataset.id;
-        const title = card.dataset.title;
-        const type = card.dataset.type;
-        const existing = selectedSeries.find(s => s.id === id);
-        if (existing) {
-          selectedSeries = selectedSeries.filter(s => s.id !== id);
-          showToast(`Removed "${title}"`, 'info');
-        } else {
-          selectedSeries.push({ id, title, tmdb_id: id, type });
-          showToast(`Added "${title}" to favorites`, 'success');
-        }
-        renderGrids();
-        updateCounters();
+    $("seriesGrid").querySelectorAll(".gc").forEach(c=>{
+      c.onclick=()=>{
+        const{id,title,type}=c.dataset;
+        const i=selectedSeries.findIndex(s=>s.id===id);
+        if(i>-1)selectedSeries.splice(i,1);else selectedSeries.push({id,title,tmdb_id:id,type});
+        render();upd();
       };
     });
   }
-
-  loginBtn.onclick = async () => {
-    loginBtn.disabled = true;
-    loginBtn.innerHTML = '🦝 Importing Library <span class="loader"></span>';
-    loginStatus.innerHTML = '';
-    
-    try {
-      const response = await fetch('/api/stremio/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailInput.value,
-          password: passwordInput.value
-        })
-      });
-      
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'Login failed');
-      
-      allMovies = data.library.filter(item => item.type === 'movie');
-      allSeries = data.library.filter(item => item.type === 'series');
-      continueWatching = data.continueWatching || [];
-      
-      for (const cw of continueWatching) {
-        if (cw.type === 'movie' && !selectedMovies.find(m => m.id === cw.id)) {
-          selectedMovies.push({ id: cw.id, title: cw.title, tmdb_id: cw.id, type: 'movie' });
-        } else if (cw.type === 'series' && !selectedSeries.find(s => s.id === cw.id)) {
-          selectedSeries.push({ id: cw.id, title: cw.title, tmdb_id: cw.id, type: 'series' });
-        }
+  $("loginBtn").onclick=async()=>{
+    const btn=$("loginBtn");btn.disabled=true;
+    btn.innerHTML='<span class="sp"></span> Importing\u2026';
+    $("loginStatus").innerHTML="";
+    try{
+      const r=await fetch("/api/stremio/login",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({email:$("email").value,password:$("password").value})});
+      const d=await r.json();
+      if(!d.success)throw new Error(d.error||"Login failed");
+      allMovies=d.library.filter(i=>i.type==="movie");
+      allSeries=d.library.filter(i=>i.type==="series");
+      continueWatching=d.continueWatching||[];
+      for(const cw of continueWatching){
+        if(cw.type==="movie"&&!selectedMovies.find(m=>m.id===cw.id))
+          selectedMovies.push({id:cw.id,title:cw.title,tmdb_id:cw.id,type:"movie"});
+        else if(cw.type==="series"&&!selectedSeries.find(s=>s.id===cw.id))
+          selectedSeries.push({id:cw.id,title:cw.title,tmdb_id:cw.id,type:"series"});
       }
-      
-      loginStatus.innerHTML = `<div class="status success">✅ Imported ${allMovies.length} movies & ${allSeries.length} series!</div>`;
-      langSection.style.display = 'block';
-      selectionSection.style.display = 'block';
-      
-      renderGrids();
-      updateCounters();
-      showToast(`Successfully imported ${allMovies.length + allSeries.length} titles!`, 'success');
-      
-    } catch (err) {
-      loginStatus.innerHTML = `<div class="status error">❌ Error: ${err.message}</div>`;
-      showToast(err.message, 'error');
-    } finally {
-      loginBtn.disabled = false;
-      loginBtn.innerHTML = '🦝 Import My Library';
+      $("loginStatus").innerHTML='<div class="st ok">\u2705 Imported '+allMovies.length+' movies & '+allSeries.length+' series</div>';
+      $("langSection").style.display="block";
+      $("selectionSection").style.display="block";
+      render();upd();
+    }catch(e){
+      $("loginStatus").innerHTML='<div class="st err">\u274c '+e.message+'</div>';
+    }finally{
+      btn.disabled=false;btn.innerHTML="\uD83E\uDD9D Import My Library";
     }
   };
-  
-  document.getElementById('clearMoviesBtn').onclick = () => {
-    selectedMovies = [];
-    renderGrids();
-    updateCounters();
-    showToast('Cleared all selected movies', 'info');
-  };
-  
-  document.getElementById('clearSeriesBtn').onclick = () => {
-    selectedSeries = [];
-    renderGrids();
-    updateCounters();
-    showToast('Cleared all selected series', 'info');
-  };
-  
-  document.querySelectorAll('.lang-btn').forEach(btn => {
-    btn.onclick = () => {
-      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedLanguage = btn.dataset.lang;
-      showToast(`Language changed to ${btn.textContent.trim()}`, 'info');
-    };
+  $("clearMoviesBtn").onclick=()=>{selectedMovies=[];render();upd();};
+  $("clearSeriesBtn").onclick=()=>{selectedSeries=[];render();upd();};
+  document.querySelectorAll(".lb").forEach(b=>{
+    b.onclick=()=>{document.querySelectorAll(".lb").forEach(x=>x.classList.remove("on"));b.classList.add("on");selectedLanguage=b.dataset.lang;};
   });
-  document.querySelector('.lang-btn[data-lang="en"]').classList.add('active');
-  
-  generateBtn.onclick = async () => {
-    if (selectedMovies.length < 5 || selectedSeries.length < 5) {
-      showToast(`Please select at least 5 movies and 5 series. Currently: ${selectedMovies.length} movies, ${selectedSeries.length} series`, 'error');
-      return;
+  $("generateBtn").onclick=async()=>{
+    if(selectedMovies.length<5||selectedSeries.length<5){
+      alert("Select at least 5 movies and 5 series.\nNow: "+selectedMovies.length+" movies, "+selectedSeries.length+" series");return;
     }
-    
-    generateBtn.disabled = true;
-    generateBtn.innerHTML = '🦝 Generating <span class="loader"></span>';
-    
-    try {
-      const response = await fetch('/api/save-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stremioEmail: emailInput.value,
-          selectedMovies,
-          selectedSeries,
-          selectedAnime: [],
-          language: selectedLanguage,
-          prefs: document.getElementById('prefs').value,
-          existingUuid: userUuid
-        })
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        document.getElementById('manifestUrl').innerText = data.manifestUrl;
-        document.getElementById('result').style.display = 'block';
-        userUuid = data.userUuid;
-        showToast('Addon generated successfully! Copy the link to Stremio.', 'success');
-        document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
-      } else {
-        showToast('Error saving configuration', 'error');
-      }
-    } catch (err) {
-      showToast('Error: ' + err.message, 'error');
-    } finally {
-      generateBtn.disabled = false;
-      generateBtn.innerHTML = '✨ Generate Racconmendations Addon';
-    }
+    const btn=$("generateBtn");btn.disabled=true;
+    btn.innerHTML='<span class="sp"></span> Generating\u2026';
+    try{
+      const r=await fetch("/api/save-config",{method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({stremioEmail:$("email").value,selectedMovies,selectedSeries,
+          selectedAnime:[],language:selectedLanguage,prefs:$("prefs").value,existingUuid:userUuid})});
+      const d=await r.json();
+      if(d.success){
+        $("manifestUrl").textContent=d.manifestUrl;
+        $("result").style.display="block";
+        userUuid=d.userUuid;
+        $("result").scrollIntoView({behavior:"smooth"});
+      }else alert("Error saving configuration");
+    }catch(e){alert("Error: "+e.message);}
+    finally{btn.disabled=false;btn.innerHTML="\u2728 Generate my Addon";}
   };
 </script>
 </body>
