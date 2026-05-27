@@ -1,23 +1,46 @@
 const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
-const { getUserSeeds, getUserLanguage } = require('../services/userStore');
+const { getUserConfig, getUserLanguage } = require('../services/userStore');
 
-const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
+const cache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 }); // 2 giorni
 
 async function getCatalog(catalogType, catalogId) {
-  console.log(`📺 getCatalog called: type=${catalogType}, catalogId=${catalogId}`);
+  console.log(`📺 getCatalog: type=${catalogType}, catalogId=${catalogId}`);
   
-  // Estrai UUID dall'ID del catalogo
+  // Parse del catalogId per capire cosa chiedere
+  // Formati possibili:
+  // - sim-movie-{seedId}-{userUuid}
+  // - sim-series-{seedId}-{userUuid}
+  // - rec-movies-{userUuid}
+  // - rec-series-{userUuid}
+  // - setup-movie-{userUuid} (pagina di setup)
+  
+  const parts = catalogId.split('-');
+  const prefix = parts[0]; // 'sim', 'rec', 'setup'
+  const mediaType = parts[1]; // 'movie' o 'series'
+  let seedId = null;
   let userUuid = null;
-  if (catalogId) {
-    // Il catalogId arriva come "racoon-movies-abc-123" o "racoon-movies-abc-123"
-    const parts = catalogId.split('-');
-    // Prende tutto dopo le prime 2 parti (racoon-movies-UUID)
-    if (parts.length >= 3) {
-      userUuid = parts.slice(2).join('-');
-    } else if (parts.length === 2) {
-      userUuid = parts[1];
-    }
+  
+  if (prefix === 'sim') {
+    // sim-movie-tt1234567-abc123
+    seedId = parts[2];
+    userUuid = parts.slice(3).join('-');
+  } else if (prefix === 'rec') {
+    // rec-movies-abc123
+    userUuid = parts.slice(2).join('-');
+  } else if (prefix === 'setup') {
+    // setup-movie-abc123
+    userUuid = parts.slice(2).join('-');
+    // Pagina di setup: mostra messaggio per configurare l'addon
+    return [{
+      id: "setup_placeholder",
+      type: catalogType,
+      name: "⚠️ Configura il tuo addon",
+      poster: null,
+      description: "Vai su /configure per selezionare i tuoi film e serie preferiti",
+      releaseInfo: "",
+      extra: {}
+    }];
   }
   
   if (!userUuid) {
@@ -25,137 +48,129 @@ async function getCatalog(catalogType, catalogId) {
     return [];
   }
   
-  console.log(`🔍 Looking up user: ${userUuid}, type: ${catalogType}`);
-  
-  const cacheKey = `${catalogType}:${userUuid}`;
+  const cacheKey = `${catalogId}:${userUuid}`;
   let cached = cache.get(cacheKey);
   if (cached) {
-    console.log(`📦 Cache hit for ${cacheKey}, returning ${cached.length} items`);
+    console.log(`📦 Cache hit: ${cached.length} items`);
     return cached;
   }
-
-  // Recupera i seed dell'utente
-  const allSeeds = await getUserSeeds(userUuid, catalogType);
+  
   const language = await getUserLanguage(userUuid);
+  let metas = [];
   
-  console.log(`🌱 Found ${allSeeds.length} seeds for user ${userUuid} (${catalogType})`);
-  
-  if (!allSeeds.length) {
-    console.log(`⚠️ No seeds found, returning empty catalog`);
-    // Restituisci alcuni item di esempio per test
-    const sampleMetas = [
-      {
-        id: "rec_550",
-        type: catalogType,
-        name: "Fight Club",
-        poster: "https://image.tmdb.org/t/p/w342/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg",
-        description: "Sample movie - add more seeds to get recommendations",
-        releaseInfo: "1999",
-        extra: { recommendationSeed: "🎬 Example: Add more movies" }
-      },
-      {
-        id: "rec_13",
-        type: catalogType,
-        name: "The Shawshank Redemption",
-        poster: "https://image.tmdb.org/t/p/w342/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg",
-        description: "Sample movie - add more seeds to get recommendations",
-        releaseInfo: "1994",
-        extra: { recommendationSeed: "🎬 Example: Add more movies" }
-      }
-    ];
-    cache.set(cacheKey, sampleMetas);
-    return sampleMetas;
-  }
-
-  // Seleziona 5 seed casuali
-  const shuffledSeeds = [...allSeeds];
-  for (let i = shuffledSeeds.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffledSeeds[i], shuffledSeeds[j]] = [shuffledSeeds[j], shuffledSeeds[i]];
-  }
-  
-  const selectedSeeds = shuffledSeeds.slice(0, 5);
-  console.log(`🎲 Selected ${selectedSeeds.length} random seeds: ${selectedSeeds.map(s => s.title).join(', ')}`);
-  
-  const allMetas = [];
-  
-  // Per ogni seed, cerca similar
-  for (let seed of selectedSeeds) {
-    const seedId = seed.tmdb_id || seed.id;
-    if (!seedId) {
-      console.log(`⚠️ Seed "${seed.title}" has no ID, skipping`);
-      continue;
+  if (prefix === 'sim' && seedId) {
+    // Catalogo "Simili a X"
+    console.log(`🎯 Simili a: seedId=${seedId}, type=${mediaType}`);
+    
+    // Cerca il seed nel database per avere il titolo
+    const config = await getUserConfig(userUuid);
+    let seedTitle = '';
+    if (mediaType === 'movie') {
+      const found = (config.selected_movies || []).find(m => m.id === seedId);
+      seedTitle = found?.title || seedId;
+    } else {
+      const found = (config.selected_series || []).find(s => s.id === seedId);
+      seedTitle = found?.title || seedId;
     }
     
-    console.log(`🔎 Fetching similar for "${seed.title}" (${seedId})...`);
-    
     try {
-      // Prova prima recommendations, poi similar
-      let items = await tmdb.getRecommendations(seed.type, seedId, language);
-      if (!items.length) {
-        items = await tmdb.getSimilar(seed.type, seedId, language);
+      let items = await tmdb.getRecommendations(mediaType, seedId, language);
+      if (!items || !items.length) {
+        items = await tmdb.getSimilar(mediaType, seedId, language);
+      }
+      if (!items || !items.length) {
+        items = await tmdb.getPopular(mediaType, language);
       }
       
-      console.log(`   Found ${items.length} similar items`);
+      metas = items.slice(0, 15).map(item => ({
+        id: `sim_${seedId}_${item.id}`,
+        type: mediaType,
+        name: item.title,
+        poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+        description: item.overview || `Simili a ${seedTitle}`,
+        releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+        extra: {}
+      }));
       
-      const limitedItems = items.slice(0, 8);
-      for (const item of limitedItems) {
-        allMetas.push({
-          id: `sim_${seedId}_${item.id}`,
-          type: catalogType,
-          name: item.title,
-          poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-          description: item.overview || `Similar to ${seed.title}`,
-          releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
-          extra: {
-            recommendationSeed: `🎬 Similar to ${seed.title}`
-          }
-        });
-      }
+      console.log(`   Trovati ${metas.length} simili per ${seedTitle}`);
+      
     } catch (err) {
-      console.error(`❌ Error fetching for ${seed.title}:`, err.message);
+      console.error(`Errore fetching per ${seedTitle}:`, err.message);
     }
+    
+  } else if (prefix === 'rec') {
+    // Catalogo "Potrebbero piacerti anche"
+    console.log(`✨ Raccomandazioni per ${mediaType}`);
+    
+    const config = await getUserConfig(userUuid);
+    const seeds = mediaType === 'movie' 
+      ? (config.selected_movies || [])
+      : (config.selected_series || []);
+    
+    let allRecs = [];
+    for (const seed of seeds.slice(0, 10)) {
+      const seedId = seed.tmdb_id || seed.id;
+      if (seedId) {
+        try {
+          const recs = await tmdb.getRecommendations(mediaType, seedId, language);
+          allRecs.push(...recs);
+        } catch (err) {
+          // ignora errori per singoli seed
+        }
+      }
+    }
+    
+    // Deduplica per ID
+    const unique = new Map();
+    for (const rec of allRecs) {
+      if (!unique.has(rec.id)) {
+        unique.set(rec.id, rec);
+      }
+    }
+    
+    metas = Array.from(unique.values()).slice(0, 30).map(item => ({
+      id: `rec_${item.id}`,
+      type: mediaType,
+      name: item.title,
+      poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+      description: item.overview || `Potrebbe piacerti`,
+      releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+      extra: {}
+    }));
+    
+    console.log(`   Trovate ${metas.length} raccomandazioni`);
   }
   
-  // Se non abbiamo trovato nulla, usa popolari come fallback
-  if (allMetas.length === 0) {
-    console.log(`⚠️ No recommendations found, fetching popular ${catalogType}s...`);
+  // Fallback: se vuoto, restituisci popolari
+  if (metas.length === 0) {
+    console.log(`⚠️ Nessun risultato, uso popolari per ${mediaType || catalogType}`);
     try {
-      const popular = await tmdb.getPopular(catalogType, language);
-      for (const item of popular.slice(0, 20)) {
-        allMetas.push({
-          id: `pop_${item.id}`,
-          type: catalogType,
-          name: item.title,
-          poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
-          description: item.overview || `Popular ${catalogType}`,
-          releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
-          extra: {
-            recommendationSeed: `🔥 Popular ${catalogType}s`
-          }
-        });
-      }
+      const popular = await tmdb.getPopular(mediaType || catalogType, language);
+      metas = popular.slice(0, 20).map(item => ({
+        id: `pop_${item.id}`,
+        type: mediaType || catalogType,
+        name: item.title,
+        poster: item.poster_path ? `https://image.tmdb.org/t/p/w342${item.poster_path}` : null,
+        description: item.overview || `Popolare`,
+        releaseInfo: item.release_date ? item.release_date.split('-')[0] : '',
+        extra: {}
+      }));
     } catch (err) {
       console.error('Error fetching popular:', err.message);
     }
   }
   
-  console.log(`✅ Generated ${allMetas.length} total items for ${catalogType}`);
+  console.log(`✅ Generati ${metas.length} items per ${catalogId}`);
   
-  // Limita a 50 items
-  const finalMetas = allMetas.slice(0, 50);
-  
-  // Salva in cache
-  cache.set(cacheKey, finalMetas);
-  
-  return finalMetas;
+  cache.set(cacheKey, metas);
+  return metas;
 }
 
 function invalidateCache(userUuid) {
   const keys = cache.keys().filter(k => k.includes(userUuid));
   if (keys.length) {
     cache.del(keys);
-    console.log(`🗑️ Invalidated cache for ${userUuid}: ${keys.length} keys`);
+    console.log(`🗑️ Cache invalidata per ${userUuid}: ${keys.length} keys`);
   }
 }
 
