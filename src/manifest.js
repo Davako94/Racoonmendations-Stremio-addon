@@ -9,9 +9,9 @@ async function getManifest(userUuid) {
   // ── Manifest base senza UUID ──────────────────────────────────────────────
   if (!userUuid) {
     return {
-      id: 'com.racoonmendations',
+      id: 'com.raccoonmendations',
       version: '3.0.0',
-      name: 'Racoonmendations',
+      name: 'Raccoonmendations',
       description: 'Personalized recommendations based on your Stremio library. Visit /configure to set up.',
       logo: 'https://i.imgur.com/8bLEBUn.png',
       resources: ['catalog'],
@@ -31,9 +31,9 @@ async function getManifest(userUuid) {
     // ── Utente non configurato ────────────────────────────────────────────
     if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
       return {
-        id: 'com.racoonmendations',
+        id: 'com.raccoonmendations',
         version: '3.0.0',
-        name: 'Racoonmendations',
+        name: 'Raccoonmendations',
         description: 'Configure your addon at /configure',
         resources: ['catalog'],
         types: ['movie', 'series'],
@@ -110,9 +110,9 @@ async function getManifest(userUuid) {
     });
 
     return {
-      id: 'com.racoonmendations',
+      id: 'com.raccoonmendations',
       version: '3.0.0',
-      name: 'Racoonmendations',
+      name: 'Raccoonmendations',
       description: 'Personalized recommendations based on your Stremio library',
       resources: ['catalog'],
       types: ['movie', 'series'],
@@ -128,9 +128,9 @@ async function getManifest(userUuid) {
   } catch (error) {
     console.error('getManifest error:', error);
     return {
-      id: 'com.racoonmendations',
+      id: 'com.raccoonmendations',
       version: '3.0.0',
-      name: 'Racoonmendations',
+      name: 'Raccoonmendations',
       description: 'Error loading manifest',
       resources: ['catalog'],
       types: ['movie', 'series'],
