@@ -14,10 +14,32 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST - DINAMICO (ASYNC)
+// MANIFEST - DINAMICO (ASYNC) - compatibile aiometadata
 // ============================================================
+// Endpoint standard per Stremio (senza parametri)
 app.get('/manifest.json', async (req, res) => {
   const userUuid = req.query.uuid;
+  try {
+    const manifest = await getManifest(userUuid);
+    res.json(manifest);
+  } catch (err) {
+    console.error('❌ Manifest error:', err);
+    res.status(500).json({ 
+      id: "racconmendations",
+      version: "3.0.0",
+      name: "Racconmendations",
+      description: "Error loading manifest",
+      resources: ["catalog"],
+      types: ["movie", "series"],
+      catalogs: [],
+      idPrefixes: ["sim_", "rec_", "pop_", "seed_"]
+    });
+  }
+});
+
+// Endpoint per aiometadata con UUID nel path
+app.get('/stremio/:userUuid/:compressedConfig/manifest.json', async (req, res) => {
+  const { userUuid } = req.params;
   try {
     const manifest = await getManifest(userUuid);
     res.json(manifest);
@@ -54,7 +76,100 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
 });
 
 // ============================================================
-// CONFIG PAGE
+// API: Config endpoints (per aiometadata)
+// ============================================================
+
+// Save user config (POST)
+app.post('/api/config/save', async (req, res) => {
+  const { userUuid, stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs } = req.body;
+  
+  const finalUuid = userUuid || uuidv4();
+  
+  try {
+    await saveUserConfig(finalUuid, {
+      stremioEmail: stremioEmail || 'manual@mode.com',
+      selectedMovies: selectedMovies || [],
+      selectedSeries: selectedSeries || [],
+      selectedAnime: selectedAnime || [],
+      language: language || 'en',
+      prefs: prefs || ''
+    });
+    
+    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const manifestUrl = `${baseUrl}/stremio/${finalUuid}/config/manifest.json`;
+    
+    console.log(`✅ Config saved for user: ${finalUuid}`);
+    res.json({ success: true, manifestUrl, userUuid: finalUuid });
+  } catch (error) {
+    console.error('❌ Error saving config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Load user config (POST)
+app.post('/api/config/load/:userUuid', async (req, res) => {
+  const { userUuid } = req.params;
+  try {
+    const config = await getUserConfig(userUuid);
+    if (!config) {
+      return res.json({ success: false, error: 'User not found' });
+    }
+    res.json({
+      success: true,
+      config: {
+        movies: config.selected_movies || [],
+        series: config.selected_series || [],
+        anime: config.selected_anime || [],
+        language: config.language || 'en',
+        preferences: config.preferences || ''
+      }
+    });
+  } catch (error) {
+    console.error('Error loading config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update user config (PUT)
+app.put('/api/config/update/:userUuid', async (req, res) => {
+  const { userUuid } = req.params;
+  const { selectedMovies, selectedSeries, selectedAnime, language, prefs } = req.body;
+  
+  try {
+    const existing = await getUserConfig(userUuid);
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    await saveUserConfig(userUuid, {
+      stremioEmail: existing.stremio_email,
+      selectedMovies: selectedMovies || existing.selected_movies || [],
+      selectedSeries: selectedSeries || existing.selected_series || [],
+      selectedAnime: selectedAnime || existing.selected_anime || [],
+      language: language || existing.language || 'en',
+      prefs: prefs || existing.preferences || ''
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating config:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Check if UUID is trusted (GET)
+app.get('/api/config/is-trusted/:uuid', async (req, res) => {
+  const { uuid } = req.params;
+  try {
+    const config = await getUserConfig(uuid);
+    res.json({ trusted: !!config });
+  } catch (error) {
+    res.json({ trusted: false });
+  }
+});
+
+// ============================================================
+// CONFIG PAGE (legacy)
 // ============================================================
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'src/public/configure.html'));
@@ -83,6 +198,34 @@ app.get('/api/poster', async (req, res) => {
   } catch (error) {
     console.error('Poster proxy error:', error.message);
     res.redirect(`https://image.tmdb.org/t/p/w185${imagePath}`);
+  }
+});
+
+// Poster proxy per aiometadata
+app.get('/poster/:type/:id', async (req, res) => {
+  const { type, id } = req.params;
+  try {
+    let posterPath = null;
+    if (type === 'movie') {
+      const details = await tmdb.getDetails('movie', id, 'en');
+      posterPath = details?.poster_path;
+    } else {
+      const details = await tmdb.getDetails('series', id, 'en');
+      posterPath = details?.poster_path;
+    }
+    
+    if (posterPath) {
+      const proxyUrl = `https://image.tmdb.org/t/p/w342${posterPath}`;
+      const imageResponse = await fetch(proxyUrl);
+      res.setHeader('Cache-Control', 'public, max-age=604800');
+      res.setHeader('Content-Type', 'image/jpeg');
+      imageResponse.body.pipe(res);
+    } else {
+      res.status(404).send('Poster not found');
+    }
+  } catch (error) {
+    console.error('Poster proxy error:', error.message);
+    res.status(404).send('Poster not found');
   }
 });
 
@@ -170,7 +313,7 @@ app.post('/api/stremio/login', async (req, res) => {
 });
 
 // ============================================================
-// API: SALVA CONFIGURAZIONE UTENTE
+// API: SALVA CONFIGURAZIONE UTENTE (legacy)
 // ============================================================
 app.post('/api/save-config', async (req, res) => {
   const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
@@ -188,7 +331,7 @@ app.post('/api/save-config', async (req, res) => {
     });
     
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    const manifestUrl = `${baseUrl}/manifest.json?uuid=${userUuid}`;
+    const manifestUrl = `${baseUrl}/stremio/${userUuid}/config/manifest.json`;
     
     console.log(`✅ Config saved for user: ${userUuid}`);
     
@@ -291,6 +434,13 @@ app.get('/api/debug-seeds/:userUuid', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// ============================================================
+// CACHE ADMIN (per aiometadata)
+// ============================================================
+app.get('/api/cache/health', (req, res) => {
+  res.json({ status: 'ok', keys: cache.keys().length });
 });
 
 // ============================================================
