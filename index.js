@@ -1,39 +1,60 @@
+// app.js
+
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fetch = require('node-fetch');
+
 const catalogHandler = require('./src/handlers/catalog');
 const { getManifest } = require('./src/manifest');
-const { 
-  saveUserConfig, 
-  getUserConfig, 
-  getUserConfigByEmail  // <-- AGGIUNGI QUESTA
+
+const {
+  saveUserConfig,
+  getUserConfig,
+  getUserConfigByEmail
 } = require('./src/services/userStore');
+
 const stremioApi = require('./src/services/stremioApi');
 const tmdb = require('./src/services/tmdb');
 
 const app = express();
 
+// ============================================================
 // CORS
+// ============================================================
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
-  if (req.method === 'OPTIONS') return res.status(204).end();
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   next();
 });
 
+// ============================================================
+// BODY
+// ============================================================
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'src/public')));
+
+// ============================================================
+// STATIC
+// ============================================================
+
+app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
 // MANIFEST
 // ============================================================
+
 app.get('/manifest.json', async (req, res) => {
-  const userUuid = req.query.uuid;
   try {
-    const manifest = await getManifest(userUuid);
+    const manifest = await getManifest(req.query.uuid);
     res.json(manifest);
   } catch (err) {
     console.error('Manifest error:', err);
@@ -46,6 +67,7 @@ app.get('/:uuid/manifest.json', async (req, res) => {
     const manifest = await getManifest(req.params.uuid);
     res.json(manifest);
   } catch (err) {
+    console.error('Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
   }
 });
@@ -55,24 +77,73 @@ app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
     const manifest = await getManifest(req.params.uuid);
     res.json(manifest);
   } catch (err) {
+    console.error('Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
   }
 });
 
 // ============================================================
-// CATALOGO
+// META
 // ============================================================
-app.get('/catalog/:type/:catalogId.json', async (req, res) => {
-  const { type, catalogId } = req.params;
-  const userUuid = req.query.uuid;
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
-  }
-  
+
+app.get('/meta/:type/:id.json', async (req, res) => {
   try {
-    const metas = await catalogHandler.getCatalog(type, catalogId, userUuid);
+    const { type, id } = req.params;
+
+    const mediaType = type === 'movie' ? 'movie' : 'tv';
+
+    const details = await tmdb.getMeta(mediaType, id);
+
+    if (!details) {
+      return res.json({ meta: null });
+    }
+
+    res.json({
+      meta: details
+    });
+
+  } catch (err) {
+    console.error('Meta error:', err);
+    res.json({ meta: null });
+  }
+});
+
+app.get('/:uuid/meta/:type/:id.json', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+
+    const mediaType = type === 'movie' ? 'movie' : 'tv';
+
+    const details = await tmdb.getMeta(mediaType, id);
+
+    if (!details) {
+      return res.json({ meta: null });
+    }
+
+    res.json({
+      meta: details
+    });
+
+  } catch (err) {
+    console.error('Meta error:', err);
+    res.json({ meta: null });
+  }
+});
+
+// ============================================================
+// CATALOG
+// ============================================================
+
+app.get('/catalog/:type/:catalogId.json', async (req, res) => {
+  try {
+    const metas = await catalogHandler.getCatalog(
+      req.params.type,
+      req.params.catalogId,
+      req.query.uuid
+    );
+
     res.json({ metas });
+
   } catch (err) {
     console.error('Catalog error:', err);
     res.json({ metas: [] });
@@ -80,31 +151,15 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
 });
 
 app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
-  const { uuid, type, catalogId } = req.params;
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
-  }
-  
   try {
-    const metas = await catalogHandler.getCatalog(type, catalogId, uuid);
-    res.json({ metas });
-  } catch (err) {
-    console.error('Catalog error:', err);
-    res.json({ metas: [] });
-  }
-});
+    const metas = await catalogHandler.getCatalog(
+      req.params.type,
+      req.params.catalogId,
+      req.params.uuid
+    );
 
-app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
-  const { uuid, type, catalogId } = req.params;
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
-  }
-  
-  try {
-    const metas = await catalogHandler.getCatalog(type, catalogId, uuid);
     res.json({ metas });
+
   } catch (err) {
     console.error('Catalog error:', err);
     res.json({ metas: [] });
@@ -114,126 +169,137 @@ app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
 // ============================================================
 // CONFIG PAGE
 // ============================================================
+
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'src/public/configure.html'));
 });
 
 // ============================================================
-// PROXY IMMAGINI
+// POSTER PROXY
 // ============================================================
+
 app.get('/api/poster', async (req, res) => {
-  const { path: imagePath, size = 'w185' } = req.query;
-  if (!imagePath) return res.status(400).json({ error: 'Path required' });
   try {
-    const proxyUrl = `https://image.tmdb.org/t/p/${size}${imagePath}`;
-    res.setHeader('Cache-Control', 'public, max-age=604800');
-    res.setHeader('Content-Type', 'image/jpeg');
-    const imageResponse = await fetch(proxyUrl);
-    if (!imageResponse.ok) throw new Error(`TMDB ${imageResponse.status}`);
-    imageResponse.body.pipe(res);
-  } catch (error) {
-    res.redirect(`https://image.tmdb.org/t/p/w185${imagePath}`);
-  }
-});
 
-app.get('/poster/:type/:id', async (req, res) => {
-  const { type, id } = req.params;
-  try {
-    const mediaType = type === 'movie' ? 'movie' : 'tv';
-    const details = await tmdb.getDetails(mediaType, id, 'en');
-    if (details?.poster_path) {
-      const proxyUrl = `https://image.tmdb.org/t/p/w342${details.poster_path}`;
-      const imageResponse = await fetch(proxyUrl);
-      res.setHeader('Cache-Control', 'public, max-age=604800');
-      res.setHeader('Content-Type', 'image/jpeg');
-      imageResponse.body.pipe(res);
-    } else {
-      res.status(404).send('Poster not found');
+    const { path: imagePath, size = 'w342' } = req.query;
+
+    if (!imagePath) {
+      return res.status(400).json({ error: 'Missing path' });
     }
-  } catch (error) {
-    res.status(404).send('Poster not found');
+
+    const url = `https://image.tmdb.org/t/p/${size}${imagePath}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`TMDB ${response.status}`);
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+
+    res.send(buffer);
+
+  } catch (err) {
+    console.error('Poster proxy error:', err);
+    res.status(500).end();
   }
 });
 
 // ============================================================
-// API: LOGIN STREMIO
+// LOGIN STREMIO
 // ============================================================
-app.post('/api/stremio/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Email and password required' });
-  }
-  
-  try {
-    console.log(`🔐 Stremio login: ${email}`);
-    const auth = await stremioApi.stremioLogin(email, password);
-    const rawLibrary = await stremioApi.getStremioLibraryRaw(auth.token);
-    const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
-    const continueWatching = stremioApi.getContinueWatchingFromLibrary(rawLibrary);
-    const seeds = stremioApi.extractSeedsFromLibrary(rawLibrary, continueWatching);
 
-    const enrichedSeeds = await Promise.all(seeds.map(async (seed) => {
-      if (!seed.poster && seed.title) {
-        try {
-          const searchResults = await tmdb.searchTmdb(seed.title, seed.type, 'en');
-          if (searchResults?.length > 0) {
-            seed.poster_path = searchResults[0].poster_path;
-            seed.tmdb_id = searchResults[0].id;
-          }
-        } catch(e) {}
-      }
-      return seed;
-    }));
+app.post('/api/stremio/login', async (req, res) => {
+
+  try {
+
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password required'
+      });
+    }
+
+    const auth = await stremioApi.stremioLogin(email, password);
+
+    const rawLibrary = await stremioApi.getStremioLibraryRaw(auth.token);
+
+    const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
 
     const libraryForUI = activeItems.map(item => ({
-      id: stremioApi.extractContentId(item._id || item.id) || (item._id || item.id),
+      id: String(
+        stremioApi.extractContentId(item._id || item.id)
+      ),
       title: item.name,
-      type: item.type === 'series' || item.type === 'show' ? 'series' : 'movie',
+      type:
+        item.type === 'series' || item.type === 'show'
+          ? 'series'
+          : 'movie',
       poster_path: item.poster,
       year: item.year
     }));
 
-    const uniqueLibrary = [];
-    const seenIds = new Set();
+    const unique = [];
+    const seen = new Set();
+
     for (const item of libraryForUI) {
-      if (item.id && !seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        uniqueLibrary.push(item);
-      }
+
+      if (!item.id) continue;
+
+      if (seen.has(item.id)) continue;
+
+      seen.add(item.id);
+
+      unique.push(item);
     }
 
     res.json({
       success: true,
-      library: uniqueLibrary,
-      continueWatching: continueWatching.map(cw => ({
-        id: cw.content_id, title: cw.title, type: cw.type,
-        poster_path: cw.poster, progressPercent: cw.percent
-      })),
-      seeds: enrichedSeeds,
-      stats: {
-        total: uniqueLibrary.length,
-        movies: uniqueLibrary.filter(i => i.type === 'movie').length,
-        series: uniqueLibrary.filter(i => i.type === 'series').length,
-        continueWatching: continueWatching.length
-      }
+      library: unique
     });
-  } catch (error) {
-    console.error('Stremio login error:', error.message);
-    res.status(401).json({ success: false, error: error.message || 'Login failed' });
+
+  } catch (err) {
+
+    console.error('Stremio login error:', err);
+
+    res.status(401).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
 // ============================================================
-// API: SALVA CONFIGURAZIONE
+// SAVE CONFIG
 // ============================================================
+
 app.post('/api/save-config', async (req, res) => {
-  const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
-  
+
   try {
-    // Cerca se esiste già un utente con questa email
+
+    const {
+      stremioEmail,
+      selectedMovies,
+      selectedSeries,
+      selectedAnime,
+      language,
+      prefs,
+      existingUuid
+    } = req.body;
+
     const existing = await getUserConfigByEmail(stremioEmail);
-    const userUuid = existing?.uuid || existingUuid || uuidv4();
-    
+
+    const userUuid =
+      existing?.uuid ||
+      existingUuid ||
+      uuidv4();
+
     const finalUuid = await saveUserConfig(userUuid, {
       stremioEmail: stremioEmail || 'manual@mode.com',
       selectedMovies: selectedMovies || [],
@@ -243,95 +309,87 @@ app.post('/api/save-config', async (req, res) => {
       prefs: prefs || ''
     });
 
-    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    const manifestUrl = `${baseUrl}/manifest.json?uuid=${finalUuid}`;
+    const baseUrl =
+      process.env.ADDON_BASE_URL ||
+      `${req.protocol}://${req.get('host')}`;
 
-    console.log(`✅ Config saved for user: ${finalUuid}`);
-    res.json({ success: true, manifestUrl, userUuid: finalUuid });
-  } catch (error) {
-    console.error('Error saving config:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+    const manifestUrl =
+      `${baseUrl}/manifest.json?uuid=${finalUuid}`;
 
-// ============================================================
-// API: RICERCA TMDB
-// ============================================================
-app.get('/api/search', async (req, res) => {
-  const { q, type, language = 'en' } = req.query;
-  if (!q || q.length < 2) return res.json([]);
-  try {
-    const results = type === 'anime'
-      ? await tmdb.searchAnime(q, language)
-      : await tmdb.searchTmdb(q, type, language);
-    res.json(results || []);
-  } catch (error) {
-    res.status(500).json([]);
-  }
-});
-
-app.get('/api/languages', (req, res) => {
-  res.json([
-    { code: 'en', name: 'English', flag: '🇬🇧' },
-    { code: 'it', name: 'Italiano', flag: '🇮🇹' },
-    { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-    { code: 'es', name: 'Español', flag: '🇪🇸' },
-    { code: 'fr', name: 'Français', flag: '🇫🇷' }
-  ]);
-});
-
-app.post('/api/invalidate/:userUuid', (req, res) => {
-  catalogHandler.invalidateCache(req.params.userUuid);
-  res.json({ ok: true });
-});
-
-app.get('/api/user-stats/:userUuid', async (req, res) => {
-  try {
-    const config = await getUserConfig(req.params.userUuid);
-    if (!config) return res.json({ success: false, error: 'User not found' });
     res.json({
       success: true,
-      stats: {
-        movies: config.selected_movies?.length || 0,
-        series: config.selected_series?.length || 0,
-        anime: config.selected_anime?.length || 0,
-        language: config.language || 'en'
-      }
+      manifestUrl,
+      userUuid: finalUuid
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+
+  } catch (err) {
+
+    console.error('Save config error:', err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 
-app.get('/api/debug-seeds/:userUuid', async (req, res) => {
+// ============================================================
+// SEARCH
+// ============================================================
+
+app.get('/api/search', async (req, res) => {
+
   try {
-    const config = await getUserConfig(req.params.userUuid);
-    res.json({
-      success: true, hasConfig: !!config,
-      moviesCount: config?.selected_movies?.length || 0,
-      seriesCount: config?.selected_series?.length || 0,
-      movies: config?.selected_movies?.slice(0,5).map(m => ({ id: m.id, title: m.title })),
-      series: config?.selected_series?.slice(0,5).map(s => ({ id: s.id, title: s.title })),
-      language: config?.language || 'en'
-    });
+
+    const { q, type, language = 'en' } = req.query;
+
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    const results =
+      type === 'anime'
+        ? await tmdb.searchAnime(q, language)
+        : await tmdb.searchTmdb(q, type, language);
+
+    res.json(results || []);
+
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+
+    console.error('Search error:', err);
+
+    res.json([]);
   }
 });
+
+// ============================================================
+// HEALTH
+// ============================================================
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '3.0.0' });
+  res.json({
+    status: 'ok',
+    version: '3.1.0',
+    timestamp: new Date().toISOString()
+  });
 });
+
+// ============================================================
+// ROOT
+// ============================================================
 
 app.get('/', (req, res) => {
   res.redirect('/configure');
 });
 
+// ============================================================
+// START
+// ============================================================
+
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
-  console.log(`🦝 Raccoonmendations running on port ${PORT}`);
-  console.log(`   Configure: http://localhost:${PORT}/configure`);
-  console.log(`   Manifest:  http://localhost:${PORT}/manifest.json`);
+  console.log(`🦝 Raccoonmendations running on ${PORT}`);
 });
 
 module.exports = app;
