@@ -1,190 +1,117 @@
-// src/manifest.js
-
 const { getUserConfig } = require('./services/userStore');
 
 async function getManifest(userUuid) {
-
   if (!userUuid) {
-
     return {
-      id: 'raccoonmendations',
-      version: '3.1.0',
-
-      name: 'Raccoonmendations',
-
-      description:
-        'Personalized recommendations based on your library',
-
-      resources: [
-        'catalog',
-        'meta'
-      ],
-
-      types: [
-        'movie',
-        'series'
-      ],
-
-      behaviorHints: {
-        configurable: true,
-        configurationRequired: false
-      },
-
+      id: "raccoonmendations",
+      version: "3.0.0",
+      name: "Raccoonmendations",
+      description: "Personalized recommendations based on your Stremio library",
+      resources: ["catalog"],
+      types: ["movie", "series"],
       catalogs: [],
-
-      idPrefixes: ['tt']
+      idPrefixes: ["tt", "tmdb:"]
     };
   }
 
   try {
-
-    const config =
-      await getUserConfig(userUuid);
-
-    if (!config) {
-
+    const config = await getUserConfig(userUuid);
+    
+    if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
       return {
-        id: 'raccoonmendations',
-        version: '3.1.0',
-
-        name: 'Raccoonmendations',
-
-        description:
-          'Configure addon first',
-
-        resources: [
-          'catalog',
-          'meta'
+        id: "raccoonmendations",
+        version: "3.0.0",
+        name: "Raccoonmendations",
+        description: "Configure your addon first at /configure",
+        resources: ["catalog"],
+        types: ["movie", "series"],
+        catalogs: [
+          { type: "movie", id: `setup-${userUuid}`, name: "⚙️ Configure Raccoonmendations" },
+          { type: "series", id: `setup-${userUuid}`, name: "⚙️ Configure Raccoonmendations" }
         ],
-
-        types: [
-          'movie',
-          'series'
-        ],
-
-        behaviorHints: {
-          configurable: true,
-          configurationRequired: false
-        },
-
-        catalogs: [],
-
-        idPrefixes: ['tt']
+        idPrefixes: ["tt", "tmdb:"]
       };
     }
-
-    const selectedMovies =
-      config.selected_movies || [];
-
-    const selectedSeries =
-      config.selected_series || [];
-
+    
+    const selectedMovies = config.selected_movies || [];
+    const selectedSeries = config.selected_series || [];
+    
+    // Seleziona 3 film casuali
+    const shuffledMovies = [...selectedMovies];
+    for (let i = shuffledMovies.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledMovies[i], shuffledMovies[j]] = [shuffledMovies[j], shuffledMovies[i]];
+    }
+    const randomMovies = shuffledMovies.slice(0, 3);
+    
+    // Seleziona 3 serie casuali
+    const shuffledSeries = [...selectedSeries];
+    for (let i = shuffledSeries.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledSeries[i], shuffledSeries[j]] = [shuffledSeries[j], shuffledSeries[i]];
+    }
+    const randomSeries = shuffledSeries.slice(0, 3);
+    
     const catalogs = [];
-
-    const randomMovies =
-      selectedMovies
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-
-    const randomSeries =
-      selectedSeries
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 3);
-
+    
+    // IMPORTANTE: uso un formato che include l'ID nel nome del catalogo,
+    // ma l'endpoint sarà lo stesso per tutti
     for (const movie of randomMovies) {
-
-      if (!movie.id || !movie.title) continue;
-
-      catalogs.push({
-        type: 'movie',
-        id: `sim-movie-${movie.id}-${userUuid}`,
-        name: `🎬 Similar to ${movie.title}`
-      });
+      if (movie.id && movie.title) {
+        catalogs.push({
+          type: "movie",
+          id: `similar--${movie.id}--${userUuid}`,
+          name: `🎬 Similar to ${movie.title}`
+        });
+      }
     }
-
+    
     for (const series of randomSeries) {
-
-      if (!series.id || !series.title) continue;
-
-      catalogs.push({
-        type: 'series',
-        id: `sim-series-${series.id}-${userUuid}`,
-        name: `📺 Similar to ${series.title}`
-      });
+      if (series.id && series.title) {
+        catalogs.push({
+          type: "series",
+          id: `similar--${series.id}--${userUuid}`,
+          name: `📺 Similar to ${series.title}`
+        });
+      }
     }
-
+    
     catalogs.push({
-      type: 'movie',
-      id: `rec-movies-${userUuid}`,
-      name: '✨ Recommended Movies'
+      type: "movie",
+      id: `rec-${userUuid}`,
+      name: "✨ You might also like"
     });
-
+    
     catalogs.push({
-      type: 'series',
-      id: `rec-series-${userUuid}`,
-      name: '✨ Recommended Series'
+      type: "series",
+      id: `rec-${userUuid}`,
+      name: "✨ You might also like"
     });
-
+    
     return {
-
-      id: 'raccoonmendations',
-
-      version: '3.1.0',
-
-      name: 'Raccoonmendations',
-
-      description:
-        'Personalized recommendations based on your library',
-
-      resources: [
-        'catalog',
-        'meta'
-      ],
-
-      types: [
-        'movie',
-        'series'
-      ],
-
-      behaviorHints: {
-        configurable: true,
-        configurationRequired: false
-      },
-
-      catalogs,
-
-      idPrefixes: ['tt']
+      id: "raccoonmendations",
+      version: "3.0.0",
+      name: "Raccoonmendations",
+      description: "Personalized recommendations based on your Stremio library",
+      resources: ["catalog"],
+      types: ["movie", "series"],
+      catalogs: catalogs,
+      idPrefixes: ["tt", "tmdb:"]
     };
-
-  } catch (err) {
-
-    console.error('Manifest error:', err);
-
+    
+  } catch (error) {
+    console.error('Error generating manifest:', error);
     return {
-      id: 'raccoonmendations',
-      version: '3.1.0',
-
-      name: 'Raccoonmendations',
-
-      description: 'Error',
-
-      resources: [
-        'catalog',
-        'meta'
-      ],
-
-      types: [
-        'movie',
-        'series'
-      ],
-
+      id: "raccoonmendations",
+      version: "3.0.0",
+      name: "Raccoonmendations",
+      description: "Error loading recommendations",
+      resources: ["catalog"],
+      types: ["movie", "series"],
       catalogs: [],
-
-      idPrefixes: ['tt']
+      idPrefixes: ["tt", "tmdb:"]
     };
   }
 }
 
-module.exports = {
-  getManifest
-};
+module.exports = { getManifest };
