@@ -17,7 +17,25 @@ async function getManifest(userUuid) {
   try {
     const config = await getUserConfig(userUuid);
     
-    if (!config || (!config.selected_movies?.length && !config.selected_series?.length)) {
+    // Gestione di sicurezza se il config non esiste nel DB
+    if (!config) {
+      return {
+        id: "raccoonmendations",
+        version: "3.0.0",
+        name: "Raccoonmendations",
+        description: "Configure your addon first at /configure",
+        resources: ["catalog"],
+        types: ["movie", "series"],
+        catalogs: [],
+        idPrefixes: ["tt", "tmdb:"]
+      };
+    }
+
+    // Supporta sia camelCase (usato in save-config) che snake_case per retrocompatibilità
+    const selectedMovies = config.selectedMovies || config.selected_movies || [];
+    const selectedSeries = config.selectedSeries || config.selected_series || [];
+    
+    if (selectedMovies.length === 0 && selectedSeries.length === 0) {
       return {
         id: "raccoonmendations",
         version: "3.0.0",
@@ -32,9 +50,6 @@ async function getManifest(userUuid) {
         idPrefixes: ["tt", "tmdb:"]
       };
     }
-    
-    const selectedMovies = config.selected_movies || [];
-    const selectedSeries = config.selected_series || [];
     
     // Seleziona 3 film casuali
     const shuffledMovies = [...selectedMovies];
@@ -54,8 +69,6 @@ async function getManifest(userUuid) {
     
     const catalogs = [];
     
-    // IMPORTANTE: uso un formato che include l'ID nel nome del catalogo,
-    // ma l'endpoint sarà lo stesso per tutti
     for (const movie of randomMovies) {
       if (movie.id && movie.title) {
         catalogs.push({
