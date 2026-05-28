@@ -44,8 +44,18 @@ async function getManifest(userUuid) {
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [
-          { type: "movie", id: `setup-${userUuid}`, name: "⚙️ Configure Raccoonmendations" },
-          { type: "series", id: `setup-${userUuid}`, name: "⚙️ Configure Raccoonmendations" }
+          { 
+            type: "movie", 
+            id: `setup_${userUuid}`, 
+            name: "⚙️ Configure Raccoonmendations",
+            extra: [{ name: "skip", isRequired: false }]
+          },
+          { 
+            type: "series", 
+            id: `setup_${userUuid}`, 
+            name: "⚙️ Configure Raccoonmendations",
+            extra: [{ name: "skip", isRequired: false }]
+          }
         ],
         idPrefixes: ["tt", "tmdb:"]
       };
@@ -69,36 +79,43 @@ async function getManifest(userUuid) {
     
     const catalogs = [];
     
+    // Cataloghi dinamici basati sui film (IDs puliti per AIOMetadata con extra.skip)
     for (const movie of randomMovies) {
       if (movie.id && movie.title) {
         catalogs.push({
           type: "movie",
-          id: `similar--${movie.id}--${userUuid}`,
-          name: `🎬 Similar to ${movie.title}`
+          id: `similar_${movie.id}_${userUuid}`,
+          name: `🎬 Similar to ${movie.title}`,
+          extra: [{ name: "skip", isRequired: false }]
         });
       }
     }
     
+    // Cataloghi dinamici basati sulle serie (IDs puliti per AIOMetadata con extra.skip)
     for (const series of randomSeries) {
       if (series.id && series.title) {
         catalogs.push({
           type: "series",
-          id: `similar--${series.id}--${userUuid}`,
-          name: `📺 Similar to ${series.title}`
+          id: `similar_${series.id}_${userUuid}`,
+          name: `📺 Similar to ${series.title}`,
+          extra: [{ name: "skip", isRequired: false }]
         });
       }
     }
     
+    // Cataloghi generici di raccomandazioni
     catalogs.push({
       type: "movie",
-      id: `rec-${userUuid}`,
-      name: "✨ You might also like"
+      id: `rec_${userUuid}`,
+      name: "✨ You might also like",
+      extra: [{ name: "skip", isRequired: false }]
     });
     
     catalogs.push({
       type: "series",
-      id: `rec-${userUuid}`,
-      name: "✨ You might also like"
+      id: `rec_${userUuid}`,
+      name: "✨ You might also like",
+      extra: [{ name: "skip", isRequired: false }]
     });
     
     return {
