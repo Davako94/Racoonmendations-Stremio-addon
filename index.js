@@ -38,6 +38,8 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   const allowed = 'Content-Type, Accept, Authorization, X-Requested-With, Range';
   res.setHeader('Access-Control-Allow-Headers', allowed);
+  res.setHeader('Access-Control-Expose-Headers', 'Cache-Control, Content-Length, Content-Type, Date, ETag');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -65,6 +67,7 @@ app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
 const handleManifest = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   try {
     let uuid = req.params.uuid || req.query.uuid;
@@ -102,6 +105,7 @@ app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 
 const handleMeta = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
@@ -128,6 +132,7 @@ app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
 
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     const metas = await catalogHandler.getCatalog(
       req.params.type,
@@ -143,6 +148,7 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
 
 const handleUuidCatalog = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   try {
     console.log(`📺 Catalog Requested: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
     const metas = await catalogHandler.getCatalog(

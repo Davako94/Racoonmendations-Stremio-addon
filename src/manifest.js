@@ -1,17 +1,17 @@
 const { getUserConfig } = require('./services/userStore');
 const NodeCache = require('node-cache');
 
-// Cache con TTL di 2 giorni (172800 secondi)
-const seedCache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
+// Cache con TTL di 1 ora (3600 secondi)
+const seedCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
 // ============================================================
-// ROTAZIONE SEED DETERMINISTICA (ogni 2 giorni)
+// ROTAZIONE SEED DETERMINISTICA (ogni 1 ora)
 // ============================================================
-function rotateSeeds(movies, series) {
-  // Usa 2-day bucket per mantenere la rotazione per 2 giorni
+function rotateSeeds(movies, series, userUuid) {
+  // Usa un bucket orario per cambiare i cataloghi ogni ora
   const crypto = require('crypto');
-  const dayBucket = Math.floor(Date.now() / (1000 * 60 * 60 * 24 * 2));
-  const seed = crypto.createHash('md5').update(String(dayBucket)).digest('hex');
+  const hourBucket = Math.floor(Date.now() / (1000 * 60 * 60));
+  const seed = crypto.createHash('md5').update(`${hourBucket}:${userUuid || 'default'}`).digest('hex');
   const seedValue = parseInt(seed.substring(0, 8), 16);
 
   const shuffleWithSeed = (items) => {
@@ -143,13 +143,13 @@ async function getManifest(userUuid) {
     // 3) MANIFEST COMPLETO CON CATALOGHI DINAMICI
     // ============================================================
 
-    // Controlla cache per i seed ruotati
-    const cacheKey = `seeds_${userUuid}`;
+    // Controlla cache per i seed ruotati basati sull'ora corrente
+    const cacheKey = `seeds_${userUuid}_${Math.floor(Date.now() / (1000 * 60 * 60))}`;
     let rotatedSeeds = seedCache.get(cacheKey);
     
     if (!rotatedSeeds) {
-      // Genera nuovi seed ruotati e cachea per 2 giorni
-      rotatedSeeds = rotateSeeds(selectedMovies, selectedSeries);
+      // Genera nuovi seed ruotati per l'ora corrente
+      rotatedSeeds = rotateSeeds(selectedMovies, selectedSeries, userUuid);
       seedCache.set(cacheKey, rotatedSeeds);
       console.log(`🔄 Nuovi seed ruotati per ${userUuid}: ${rotatedSeeds.movies.length} film, ${rotatedSeeds.series.length} serie`);
     } else {
