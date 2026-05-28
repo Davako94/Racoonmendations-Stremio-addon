@@ -7,7 +7,20 @@ const cache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
 async function getCatalog(catalogType, catalogId, userUuid) {
   console.log(`📺 getCatalog: ${catalogType}/${catalogId} (uuid: ${userUuid})`);
 
-  if (!userUuid && !catalogId.includes('setup') && !catalogId.includes('rec-')) {
+  // Per i cataloghi di setup, non serve UUID
+  if (catalogId.includes('setup')) {
+    return [{
+      id: 'setup_placeholder',
+      type: catalogType,
+      name: '⚙️ Configure Raccoonmendations',
+      poster: null,
+      description: 'Open /configure to select your favorites',
+      releaseInfo: '',
+      extra: {}
+    }];
+  }
+
+  if (!userUuid) {
     console.log('   ❌ No user UUID');
     return [];
   }
@@ -29,6 +42,10 @@ async function getCatalog(catalogType, catalogId, userUuid) {
     const parts = catalogId.split('--');
     if (parts.length >= 2) {
       seedId = parts[1];
+      // Pulisci l'ID (rimuovi eventuale prefisso tmdb:)
+      if (seedId.startsWith('tmdb:')) {
+        seedId = seedId.replace('tmdb:', '');
+      }
       console.log(`   🎯 Parsed seed ID: ${seedId}`);
     }
   }
@@ -40,23 +57,8 @@ async function getCatalog(catalogType, catalogId, userUuid) {
     isRecommendations = true;
     console.log(`   ✨ Recommendations catalog`);
   }
-  
-  // ============================================================
-  // SETUP
-  // ============================================================
-  if (catalogId.includes('setup')) {
-    return [{
-      id: 'setup_placeholder',
-      type: catalogType,
-      name: '⚙️ Configure Raccoonmendations',
-      poster: null,
-      description: 'Open /configure to select your favorites',
-      releaseInfo: '',
-      extra: {}
-    }];
-  }
 
-  const language = await getUserLanguage(userUuid || 'default');
+  const language = await getUserLanguage(userUuid);
   let items = [];
 
   // ============================================================
@@ -65,19 +67,12 @@ async function getCatalog(catalogType, catalogId, userUuid) {
   if (seedId) {
     console.log(`   🔍 Fetching similar to: ${seedId}`);
     
-    // Pulisci l'ID (rimuovi eventuale prefisso)
-    let cleanSeedId = seedId;
-    if (seedId.startsWith('tmdb:')) {
-      cleanSeedId = seedId.replace('tmdb:', '');
-    }
-    
-    // Determina il tipo di media
     const mediaType = catalogType === 'movie' ? 'movie' : 'tv';
     
     try {
       const [recommendations, similar] = await Promise.all([
-        tmdb.getRecommendations(mediaType, cleanSeedId, language),
-        tmdb.getSimilar(mediaType, cleanSeedId, language)
+        tmdb.getRecommendations(mediaType, seedId, language),
+        tmdb.getSimilar(mediaType, seedId, language)
       ]);
       
       const merged = [...recommendations, ...similar];
