@@ -2,13 +2,12 @@ const { getUserConfig } = require('./services/userStore');
 
 async function getManifest(userUuid) {
   // ============================================================
-  // 1) MANIFEST SENZA UUID → deve essere comunque valido
-  //    (AIOMetadata richiede almeno 1 catalogo valido)
+  // 1) MANIFEST SENZA UUID → AIOMetadata richiede cataloghi validi
   // ============================================================
   if (!userUuid) {
     return {
       id: "raccoonmendations",
-      version: "3.1.0",
+      version: "3.2.0",
       name: "Raccoonmendations",
       description: "Configure your addon first at /configure",
       resources: ["catalog"],
@@ -37,11 +36,11 @@ async function getManifest(userUuid) {
   try {
     const config = await getUserConfig(userUuid);
 
-    // Nessuna configurazione trovata → manifest valido ma "vuoto"
+    // Nessuna configurazione → manifest valido ma "setup"
     if (!config) {
       return {
         id: "raccoonmendations",
-        version: "3.1.0",
+        version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
         resources: ["catalog"],
@@ -71,7 +70,7 @@ async function getManifest(userUuid) {
     if (selectedMovies.length === 0 && selectedSeries.length === 0) {
       return {
         id: "raccoonmendations",
-        version: "3.1.0",
+        version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
         resources: ["catalog"],
@@ -98,7 +97,6 @@ async function getManifest(userUuid) {
     // 3) MANIFEST COMPLETO CON CATALOGHI DINAMICI
     // ============================================================
 
-    // Shuffle helper
     const shuffle = arr => arr.sort(() => Math.random() - 0.5);
 
     const randomMovies = shuffle([...selectedMovies]).slice(0, 3);
@@ -113,7 +111,10 @@ async function getManifest(userUuid) {
           type: "movie",
           id: `similar_${movie.id}_${userUuid}`,
           name: `🎬 Similar to ${movie.title}`,
-          extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+          extra: [
+            { name: "skip", isRequired: false },
+            { name: "search", isRequired: false }
+          ]
         });
       }
     }
@@ -125,7 +126,10 @@ async function getManifest(userUuid) {
           type: "series",
           id: `similar_${series.id}_${userUuid}`,
           name: `📺 Similar to ${series.title}`,
-          extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+          extra: [
+            { name: "skip", isRequired: false },
+            { name: "search", isRequired: false }
+          ]
         });
       }
     }
@@ -135,19 +139,25 @@ async function getManifest(userUuid) {
       type: "movie",
       id: `rec_${userUuid}`,
       name: "✨ You might also like",
-      extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+      extra: [
+        { name: "skip", isRequired: false },
+        { name: "search", isRequired: false }
+      ]
     });
 
     catalogs.push({
       type: "series",
       id: `rec_${userUuid}`,
       name: "✨ You might also like",
-      extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+      extra: [
+        { name: "skip", isRequired: false },
+        { name: "search", isRequired: false }
+      ]
     });
 
     return {
       id: "raccoonmendations",
-      version: "3.1.0",
+      version: "3.2.0",
       name: "Raccoonmendations",
       description: "Personalized recommendations based on your Stremio library",
       resources: ["catalog"],
@@ -160,7 +170,7 @@ async function getManifest(userUuid) {
     console.error("Manifest generation error:", error);
     return {
       id: "raccoonmendations",
-      version: "3.1.0",
+      version: "3.2.0",
       name: "Raccoonmendations",
       description: "Error loading recommendations",
       resources: ["catalog"],
