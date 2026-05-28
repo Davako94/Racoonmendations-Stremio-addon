@@ -49,44 +49,31 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST
+// MANIFEST CONFIGURATION (Agnostico per AIOMetadata)
 // ============================================================
 
-app.get('/manifest.json', async (req, res) => {
+const handleManifest = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
-    const manifest = await getManifest(req.query.uuid);
+    const uuid = req.params.uuid || req.query.uuid;
+    const manifest = await getManifest(uuid);
     res.json(manifest);
   } catch (err) {
     console.error('Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
   }
-});
+};
 
-app.get('/:uuid/manifest.json', async (req, res) => {
-  try {
-    const manifest = await getManifest(req.params.uuid);
-    res.json(manifest);
-  } catch (err) {
-    console.error('Manifest error:', err);
-    res.status(500).json({ error: 'Manifest error' });
-  }
-});
-
-app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
-  try {
-    const manifest = await getManifest(req.params.uuid);
-    res.json(manifest);
-  } catch (err) {
-    console.error('Manifest error:', err);
-    res.status(500).json({ error: 'Manifest error' });
-  }
-});
+app.get('/manifest.json', handleManifest);
+app.get('/:uuid/manifest.json', handleManifest);
+app.get('/stremio/:uuid/config/manifest.json', handleManifest);
 
 // ============================================================
 // META
 // ============================================================
 
-app.get('/meta/:type/:id.json', async (req, res) => {
+const handleMeta = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
@@ -101,58 +88,24 @@ app.get('/meta/:type/:id.json', async (req, res) => {
     console.error('Meta error:', err);
     res.json({ meta: null });
   }
-});
+};
 
-app.get('/:uuid/meta/:type/:id.json', async (req, res) => {
-  try {
-    const { type, id } = req.params;
-    const mediaType = type === 'movie' ? 'movie' : 'tv';
-    const details = await tmdb.getMeta(mediaType, id);
-
-    if (!details) {
-      return res.json({ meta: null });
-    }
-
-    res.json({ meta: details });
-  } catch (err) {
-    console.error('Meta error:', err);
-    res.json({ meta: null });
-  }
-});
-
-// ============================================================
-// META - AIOMetadata
-// ============================================================
-
-app.get('/stremio/:uuid/meta/:type/:id.json', async (req, res) => {
-  try {
-    const { type, id } = req.params;
-    const mediaType = type === 'movie' ? 'movie' : 'tv';
-    const details = await tmdb.getMeta(mediaType, id);
-
-    if (!details) {
-      return res.json({ meta: null });
-    }
-
-    res.json({ meta: details });
-  } catch (err) {
-    console.error('AIOMetadata Meta error:', err);
-    res.json({ meta: null });
-  }
-});
+app.get('/meta/:type/:id.json', handleMeta);
+app.get('/:uuid/meta/:type/:id.json', handleMeta);
+app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
 
 // ============================================================
 // CATALOG
 // ============================================================
 
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
     const metas = await catalogHandler.getCatalog(
       req.params.type,
       req.params.catalogId,
       req.query.uuid
     );
-
     res.json({ metas });
   } catch (err) {
     console.error('Catalog error:', err);
@@ -160,41 +113,24 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   }
 });
 
-app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
+const handleUuidCatalog = async (req, res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
   try {
+    console.log(`📺 Catalog Requested: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
     const metas = await catalogHandler.getCatalog(
       req.params.type,
       req.params.catalogId,
       req.params.uuid
     );
-
     res.json({ metas });
   } catch (err) {
-    console.error('Catalog error:', err);
+    console.error('Catalog path error:', err);
     res.json({ metas: [] });
   }
-});
+};
 
-// ============================================================
-// CATALOG - AIOMetadata
-// ============================================================
-
-app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
-  try {
-    console.log(`📺 AIOMetadata Catalog: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
-    
-    const metas = await catalogHandler.getCatalog(
-      req.params.type,
-      req.params.catalogId,
-      req.params.uuid
-    );
-
-    res.json({ metas });
-  } catch (err) {
-    console.error('AIOMetadata Catalog error:', err);
-    res.json({ metas: [] });
-  }
-});
+app.get('/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
+app.get('/stremio/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
 
 // ============================================================
 // CONFIG PAGE
@@ -217,7 +153,6 @@ app.get('/api/poster', async (req, res) => {
     }
 
     const url = `https://image.tmdb.org/t/p/${size}${imagePath}`;
-
     const response = await fetch(url);
 
     if (!response.ok) {
@@ -253,9 +188,7 @@ app.post('/api/stremio/login', async (req, res) => {
     }
 
     const auth = await stremioApi.stremioLogin(email, password);
-
     const rawLibrary = await stremioApi.getStremioLibraryRaw(auth.token);
-
     const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
 
     const libraryForUI = activeItems.map(item => ({
@@ -306,7 +239,6 @@ app.post('/api/save-config', async (req, res) => {
     } = req.body;
 
     const existing = await getUserConfigByEmail(stremioEmail);
-
     const userUuid = existing?.uuid || existingUuid || uuidv4();
 
     const finalUuid = await saveUserConfig(userUuid, {
@@ -319,8 +251,9 @@ app.post('/api/save-config', async (req, res) => {
     });
 
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-
-    const manifestUrl = `${baseUrl}/manifest.json?uuid=${finalUuid}`;
+    
+    // Genera l'URL strutturato pulito raccomandato per le integrazioni custom manifest
+    const manifestUrl = `${baseUrl}/${finalUuid}/manifest.json`;
 
     res.json({
       success: true,
@@ -456,8 +389,6 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`🦝 Raccoonmendations running on ${PORT}`);
-  console.log(`   Configure: http://localhost:${PORT}/configure`);
-  console.log(`   Manifest: http://localhost:${PORT}/manifest.json?uuid=YOUR_UUID`);
 });
 
 module.exports = app;
