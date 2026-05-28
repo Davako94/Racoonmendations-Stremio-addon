@@ -1,6 +1,11 @@
 const { getUserConfig } = require('./services/userStore');
 const crypto = require('crypto');
 
+function normalizeBaseUrl(value) {
+  if (!value) return '';
+  return String(value).replace(/\/+$|\/+(?=\?)/g, '');
+}
+
 function getHourlySeed(userUuid) {
   const hourIndex = Math.floor(Date.now() / 3600000);
   const hash = crypto.createHash('sha256').update(`${userUuid}:${hourIndex}`).digest();
@@ -30,6 +35,7 @@ function sampleRandom(items, count, seed) {
 }
 
 async function getManifest(userUuid, baseUrl = process.env.ADDON_BASE_URL || 'https://raccoonmendations-stremio-addon.vercel.app') {
+  baseUrl = normalizeBaseUrl(baseUrl);
   // ============================================================
   // 1) MANIFEST SENZA UUID → AIOMetadata richiede cataloghi validi
   // ============================================================

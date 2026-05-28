@@ -19,6 +19,11 @@ const tmdb = require('./src/services/tmdb');
 
 const app = express();
 
+function normalizeBaseUrl(value) {
+  if (!value) return '';
+  return String(value).replace(/\/+$|\/+(?=\?)/g, '');
+}
+
 // ============================================================
 // CORS
 // ============================================================
@@ -78,7 +83,7 @@ const handleManifest = async (req, res) => {
 
   try {
     let uuid = req.params.uuid || req.query.uuid;
-    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
 
     // ============================================================
     // 🔥 PATCH: Estrai UUID dal Referer se mancante
@@ -93,7 +98,7 @@ const handleManifest = async (req, res) => {
 
     console.log(`📄 Manifest richiesto (uuid: ${uuid || "none"})`);
 
-    const manifest = await getManifest(uuid);
+    const manifest = await getManifest(uuid, baseUrl);
     res.json(manifest);
 
   } catch (err) {
@@ -112,8 +117,7 @@ app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 // ============================================================
 
 const handleMeta = async (req, res) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setNoCacheHeaders(res);
   try {
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
@@ -294,8 +298,7 @@ app.post('/api/save-config', async (req, res) => {
       prefs: prefs || ''
     });
 
-    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
-    
+    const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
     const manifestUrl = `${baseUrl}/${finalUuid}/manifest.json`;
 
     res.json({
@@ -445,6 +448,10 @@ app.get('/health', (req, res) => {
 // ============================================================
 // ROOT
 // ============================================================
+
+app.get('/favicon.ico', (req, res) => {
+  res.sendFile(path.join(__dirname, 'src/public/logo.png'));
+});
 
 app.get('/', (req, res) => {
   res.redirect('/configure');
