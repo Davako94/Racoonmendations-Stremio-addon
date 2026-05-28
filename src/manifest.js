@@ -1,31 +1,32 @@
 const { getUserConfig } = require('./services/userStore');
-const NodeCache = require('node-cache');
+const crypto = require('crypto');
 
-// Cache con TTL di 1 ora (3600 secondi)
-const seedCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
+function getHourlySeed(userUuid) {
+  const hourIndex = Math.floor(Date.now() / 3600000);
+  const hash = crypto.createHash('sha256').update(`${userUuid}:${hourIndex}`).digest();
+  return hash.readUInt32LE(0);
+}
 
-// ============================================================
-// ROTAZIONE SEED DETERMINISTICA (ogni 1 ora)
-// ============================================================
-function rotateSeeds(movies, series, userUuid) {
-  // Usa un bucket orario per cambiare i cataloghi ogni ora
-  const crypto = require('crypto');
-  const hourBucket = Math.floor(Date.now() / (1000 * 60 * 60));
-  const seed = crypto.createHash('md5').update(`${hourBucket}:${userUuid || 'default'}`).digest('hex');
-  const seedValue = parseInt(seed.substring(0, 8), 16);
-
-  const shuffleWithSeed = (items) => {
-    return [...items].sort((a, b) => {
-      const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
-      const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
-      return (hashA + seedValue) - (hashB + seedValue);
-    });
-  };
-
-  return {
-    movies: shuffleWithSeed(movies).slice(0, 5),
-    series: shuffleWithSeed(series).slice(0, 5)
-  };
+function sampleRandom(items, count, seed) {
+  const result = [...items];
+  if (typeof seed === 'number') {
+    let state = seed >>> 0;
+    const seededRandom = () => {
+      state = Math.imul(state ^ (state >>> 15), 2246822519);
+      state = (state + Math.imul(state ^ (state >>> 7), 3266489917)) >>> 0;
+      return ((state ^ (state >>> 14)) >>> 0) / 4294967296;
+    };
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(seededRandom() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+  } else {
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = crypto.randomInt(0, i + 1);
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+  }
+  return result.slice(0, Math.min(count, result.length));
 }
 
 async function getManifest(userUuid) {
@@ -143,18 +144,13 @@ async function getManifest(userUuid) {
     // 3) MANIFEST COMPLETO CON CATALOGHI DINAMICI
     // ============================================================
 
-    // Controlla cache per i seed ruotati basati sull'ora corrente
-    const cacheKey = `seeds_${userUuid}_${Math.floor(Date.now() / (1000 * 60 * 60))}`;
-    let rotatedSeeds = seedCache.get(cacheKey);
-    
-    if (!rotatedSeeds) {
-      // Genera nuovi seed ruotati per l'ora corrente
-      rotatedSeeds = rotateSeeds(selectedMovies, selectedSeries, userUuid);
-      seedCache.set(cacheKey, rotatedSeeds);
-      console.log(`🔄 Nuovi seed ruotati per ${userUuid}: ${rotatedSeeds.movies.length} film, ${rotatedSeeds.series.length} serie`);
-    } else {
-      console.log(`✅ Seed dalla cache per ${userUuid}`);
-    }
+    // Seleziona una rotazione casuale stabile per ora basata su UUID utente.
+    const hourSeed = getHourlySeed(userUuid);
+    const rotatedSeeds = {
+      movies: sampleRandom(selectedMovies, 5, hourSeed),
+      series: sampleRandom(selectedSeries, 5, hourSeed + 1)
+    };
+    console.log(`🔄 Hourly rotation for ${userUuid}: ${rotatedSeeds.movies.length} movie seeds, ${rotatedSeeds.series.length} series seeds`);
 
     const randomMovies = rotatedSeeds.movies;
     const randomSeries = rotatedSeeds.series;
