@@ -8,30 +8,23 @@ const seedCache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
 // ROTAZIONE SEED DETERMINISTICA (ogni 2 giorni)
 // ============================================================
 function rotateSeeds(movies, series) {
-  // Usa MD5 del timestamp di oggi per una rotazione deterministica
+  // Usa 2-day bucket per mantenere la rotazione per 2 giorni
   const crypto = require('crypto');
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-  const seed = crypto.createHash('md5').update(today).digest('hex');
-  
-  // Usa il seed per ordine deterministico
+  const dayBucket = Math.floor(Date.now() / (1000 * 60 * 60 * 24 * 2));
+  const seed = crypto.createHash('md5').update(String(dayBucket)).digest('hex');
   const seedValue = parseInt(seed.substring(0, 8), 16);
-  
-  // Shuffle deterministico basato su seedValue
-  const shuffledMovies = [...movies].sort((a, b) => {
-    const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
-    const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
-    return (hashA + seedValue) - (hashB + seedValue);
-  });
-  
-  const shuffledSeries = [...series].sort((a, b) => {
-    const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
-    const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
-    return (hashA + seedValue) - (hashB + seedValue);
-  });
-  
+
+  const shuffleWithSeed = (items) => {
+    return [...items].sort((a, b) => {
+      const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
+      const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
+      return (hashA + seedValue) - (hashB + seedValue);
+    });
+  };
+
   return {
-    movies: shuffledMovies.slice(0, 5),
-    series: shuffledSeries.slice(0, 5)
+    movies: shuffleWithSeed(movies).slice(0, 5),
+    series: shuffleWithSeed(series).slice(0, 5)
   };
 }
 
@@ -45,6 +38,8 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Configure your addon first at /configure",
+      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
+      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [
@@ -61,7 +56,11 @@ async function getManifest(userUuid) {
           extra: [{ name: "skip", isRequired: false }]
         }
       ],
-      idPrefixes: ["tt", "tmdb"]
+        idPrefixes: ["tt", "tmdb:"],
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: false
+        }
     };
   }
 
@@ -78,6 +77,8 @@ async function getManifest(userUuid) {
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
+        logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
+        background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [
@@ -94,7 +95,11 @@ async function getManifest(userUuid) {
             extra: [{ name: "skip", isRequired: false }]
           }
         ],
-        idPrefixes: ["tt", "tmdb"]
+        idPrefixes: ["tt", "tmdb:"],
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: false
+        }
       };
     }
 
@@ -108,6 +113,8 @@ async function getManifest(userUuid) {
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
+        logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
+        background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [
@@ -120,11 +127,15 @@ async function getManifest(userUuid) {
           {
             type: "series",
             id: `setup_${userUuid}`,
-            name: "⚙️ Configure Raccoonmendazioni",
+            name: "⚙️ Configure Raccoonmendations",
             extra: [{ name: "skip", isRequired: false }]
           }
         ],
-        idPrefixes: ["tt", "tmdb"]
+        idPrefixes: ["tt", "tmdb:"],
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: false
+        }
       };
     }
 
@@ -206,10 +217,16 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Personalized recommendations based on your Stremio library",
+      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
+      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs,
-      idPrefixes: ["tt", "tmdb"]
+      idPrefixes: ["tt", "tmdb:"],
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: false
+      }
     };
 
   } catch (error) {
@@ -219,10 +236,16 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Error loading recommendations",
+      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
+      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [],
-      idPrefixes: ["tt", "tmdb"]
+      idPrefixes: ["tt", "tmdb:"],
+      behaviorHints: {
+        configurable: true,
+        configurationRequired: false
+      }
     };
   }
 }

@@ -24,9 +24,20 @@ const app = express();
 // ============================================================
 
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Prefer echoing the request Origin to support credentialed requests from webviews/mobile apps
+  const origin = req.headers.origin;
+  if (origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    // Tell caches to vary responses by origin
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+  }
+
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept');
+  const allowed = 'Content-Type, Accept, Authorization, X-Requested-With, Range';
+  res.setHeader('Access-Control-Allow-Headers', allowed);
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
@@ -83,6 +94,7 @@ const handleManifest = async (req, res) => {
 app.get('/manifest.json', handleManifest);
 app.get('/:uuid/manifest.json', handleManifest);
 app.get('/stremio/:uuid/config/manifest.json', handleManifest);
+app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 
 // ============================================================
 // META
@@ -147,6 +159,10 @@ const handleUuidCatalog = async (req, res) => {
 
 app.get('/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
 app.get('/stremio/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
+app.get('/stremio/:uuid/:compressedConfig/catalog/:type/:catalogId.json', handleUuidCatalog);
+
+app.get('/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
+app.get('/stremio/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
 
 // ============================================================
 // CONFIG PAGE
