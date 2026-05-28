@@ -49,15 +49,31 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST CONFIGURATION (Agnostico per AIOMetadata)
+// MANIFEST CONFIGURATION (Compatibile AIOMetadata)
 // ============================================================
 
 const handleManifest = async (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
   try {
-    const uuid = req.params.uuid || req.query.uuid;
+    let uuid = req.params.uuid || req.query.uuid;
+
+    // ============================================================
+    // 🔥 PATCH: Estrai UUID dal Referer se mancante
+    // ============================================================
+    if (!uuid && req.headers.referer) {
+      const match = req.headers.referer.match(/\/([0-9a-fA-F-]{36})(\/|$)/);
+      if (match) {
+        uuid = match[1];
+        console.log(`📌 UUID estratto dal Referer: ${uuid}`);
+      }
+    }
+
+    console.log(`📄 Manifest richiesto (uuid: ${uuid || "none"})`);
+
     const manifest = await getManifest(uuid);
     res.json(manifest);
+
   } catch (err) {
     console.error('Manifest error:', err);
     res.status(500).json({ error: 'Manifest error' });
@@ -252,7 +268,6 @@ app.post('/api/save-config', async (req, res) => {
 
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
     
-    // Genera l'URL strutturato pulito raccomandato per le integrazioni custom manifest
     const manifestUrl = `${baseUrl}/${finalUuid}/manifest.json`;
 
     res.json({
