@@ -1,11 +1,38 @@
 {
   "version": 2,
   "builds": [
-    { "src": "index.js", "use": "@vercel/node" },
-    { "src": "src/public/**", "use": "@vercel/static" }
+    {
+      "src": "index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "src/public/**",
+      "use": "@vercel/static"
+    }
   ],
   "routes": [
-    { "src": "/configure.html", "dest": "/src/public/configure.html" },
-    { "src": "/(.*)", "dest": "/index.js" }
+    {
+      "src": "/configure",
+      "dest": "/src/public/configure.html"
+    },
+    {
+      "src": "/static/(.*)",
+      "dest": "/src/public/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.js"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Accept" },
+        { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    }
   ]
 }
