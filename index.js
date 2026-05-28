@@ -10,7 +10,6 @@ const tmdb = require('./src/services/tmdb');
 
 const app = express();
 
-// CORS
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -24,127 +23,145 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// MANIFEST - TUTTI I FORMATI
+// MANIFEST - UNICA ROUTE
 // ============================================================
-
-// Formato 1: /manifest.json (base, senza UUID)
 app.get('/manifest.json', async (req, res) => {
   const userUuid = req.query.uuid;
-  console.log(`📄 Manifest requested (query): ${userUuid}`);
+  console.log(`📄 Manifest: ${userUuid}`);
   const manifest = await getManifest(userUuid);
   res.json(manifest);
 });
 
-// Formato 2: /:uuid/manifest.json (Stremio standard)
-app.get('/:uuid/manifest.json', async (req, res) => {
-  console.log(`📄 Manifest requested (path): ${req.params.uuid}`);
-  const manifest = await getManifest(req.params.uuid);
-  res.json(manifest);
-});
-
-// Formato 3: /stremio/:uuid/config/manifest.json (AIOMetadata)
-app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
-  console.log(`📄 AIOMetadata manifest: ${req.params.uuid}`);
-  const manifest = await getManifest(req.params.uuid);
-  res.json(manifest);
-});
-
 // ============================================================
-// CATALOGO - TUTTI I FORMATI
+// CATALOGO - UNICA ROUTE (cattura TUTTO)
 // ============================================================
-
-// Formato 1: /catalog/:type/:catalogId.json (legacy, con query uuid)
-app.get('/catalog/:type/:catalogId.json', async (req, res) => {
-  const { type, catalogId } = req.params;
-  const userUuid = req.query.uuid;
+app.get('*', async (req, res) => {
+  const url = req.url;
+  console.log(`🌐 Request: ${url}`);
   
-  console.log(`📺 Catalog legacy: ${type}/${catalogId} (uuid: ${userUuid})`);
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
+  // Verifica se è una richiesta di catalogo
+  if (url.includes('/catalog/')) {
+    const parts = url.split('/');
+    // Formato: /catalog/movie/similar--xxx--uuid.json oppure /catalog/movie/similar--xxx--uuid.json?uuid=xxx
+    let catalogId = null;
+    let catalogType = null;
+    
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === 'catalog' && i + 2 < parts.length) {
+        catalogType = parts[i + 1];
+        catalogId = parts[i + 2].replace('.json', '');
+        break;
+      }
+    }
+    
+    // Estrai UUID dalla query string o dal path
+    let userUuid = req.query.uuid;
+    
+    if (!userUuid && catalogId) {
+      // Cerca UUID nel catalogId (formato: similar--tt123--uuid)
+      const uuidMatch = catalogId.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i);
+      if (uuidMatch) {
+        userUuid = uuidMatch[1];
+      }
+    }
+    
+    console.log(`   Catalog: type=${catalogType}, id=${catalogId}, uuid=${userUuid}`);
+    
+    if (!catalogType || !['movie', 'series'].includes(catalogType)) {
+      return res.json({ metas: [] });
+    }
+    
+    // Setup catalog
+    if (catalogId && catalogId.includes('setup')) {
+      return res.json({ metas: [{
+        id: 'setup',
+        type: catalogType,
+        name: '⚙️ Configure Raccoonmendations',
+        poster: null,
+        description: 'Open /configure to select your favorites',
+        releaseInfo: '',
+        extra: {}
+      }] });
+    }
+    
+    if (!userUuid) {
+      console.log('   No UUID, returning empty');
+      return res.json({ metas: [] });
+    }
+    
+    try {
+      const metas = await catalogHandler.getCatalog(catalogType, catalogId, userUuid);
+      res.json({ metas });
+    } catch (err) {
+      console.error('Catalog error:', err);
+      res.json({ metas: [] });
+    }
+    return;
   }
   
-  const metas = await catalogHandler.getCatalog(type, catalogId, userUuid);
-  res.json({ metas });
-});
-
-// Formato 2: /:uuid/catalog/:type/:catalogId.json (Stremio standard)
-app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
-  const { uuid, type, catalogId } = req.params;
-  
-  console.log(`📺 Catalog standard: ${type}/${catalogId} (uuid: ${uuid})`);
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
+  // Health check
+  if (url === '/health') {
+    return res.json({ status: 'ok' });
   }
   
-  const metas = await catalogHandler.getCatalog(type, catalogId, uuid);
-  res.json({ metas });
-});
-
-// Formato 3: /stremio/:uuid/catalog/:type/:catalogId.json (AIOMetadata)
-app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
-  const { uuid, type, catalogId } = req.params;
-  
-  console.log(`📺 AIOMetadata catalog: ${type}/${catalogId} (uuid: ${uuid})`);
-  
-  if (!['movie', 'series'].includes(type)) {
-    return res.json({ metas: [] });
+  // Configure page
+  if (url === '/configure' || url === '/') {
+    return res.sendFile(path.join(__dirname, 'src/public/configure.html'));
   }
   
-  const metas = await catalogHandler.getCatalog(type, catalogId, uuid);
-  res.json({ metas });
-});
-
-// ============================================================
-// CONFIG PAGE
-// ============================================================
-app.get('/configure', (req, res) => {
-  res.sendFile(path.join(__dirname, 'src/public/configure.html'));
-});
-
-// ============================================================
-// PROXY IMMAGINI
-// ============================================================
-app.get('/api/poster', async (req, res) => {
-  const { path: imagePath, size = 'w185' } = req.query;
-  if (!imagePath) return res.status(400).json({ error: 'Path required' });
-  try {
-    const proxyUrl = `https://image.tmdb.org/t/p/${size}${imagePath}`;
-    res.setHeader('Cache-Control', 'public, max-age=604800');
-    res.setHeader('Content-Type', 'image/jpeg');
-    const imageResponse = await fetch(proxyUrl);
-    if (!imageResponse.ok) throw new Error(`TMDB ${imageResponse.status}`);
-    imageResponse.body.pipe(res);
-  } catch (error) {
-    res.redirect(`https://image.tmdb.org/t/p/w185${imagePath}`);
+  // API routes
+  if (url.startsWith('/api/')) {
+    if (url === '/api/languages') {
+      return res.json([
+        { code: 'en', name: 'English', flag: '🇬🇧' },
+        { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+        { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+        { code: 'es', name: 'Español', flag: '🇪🇸' },
+        { code: 'fr', name: 'Français', flag: '🇫🇷' }
+      ]);
+    }
+    
+    if (url === '/api/search' && req.query.q) {
+      try {
+        const results = await tmdb.searchTmdb(req.query.q, req.query.type || 'movie', req.query.language || 'en');
+        return res.json(results || []);
+      } catch(e) { return res.json([]); }
+    }
+    
+    if (url === '/api/stremio/login' && req.method === 'POST') {
+      return handleStremioLogin(req, res);
+    }
+    
+    if (url === '/api/save-config' && req.method === 'POST') {
+      return handleSaveConfig(req, res);
+    }
   }
-});
-
-// Poster proxy per AIOMetadata
-app.get('/poster/:type/:id', async (req, res) => {
-  const { type, id } = req.params;
-  try {
-    const mediaType = type === 'movie' ? 'movie' : 'tv';
-    const details = await tmdb.getDetails(mediaType, id, 'en');
-    if (details?.poster_path) {
-      const proxyUrl = `https://image.tmdb.org/t/p/w342${details.poster_path}`;
+  
+  // Poster proxy
+  if (url.startsWith('/api/poster')) {
+    const imagePath = req.query.path;
+    if (!imagePath) return res.status(400).json({ error: 'Path required' });
+    try {
+      const proxyUrl = `https://image.tmdb.org/t/p/${req.query.size || 'w185'}${imagePath}`;
       const imageResponse = await fetch(proxyUrl);
       res.setHeader('Cache-Control', 'public, max-age=604800');
       res.setHeader('Content-Type', 'image/jpeg');
       imageResponse.body.pipe(res);
-    } else {
-      res.status(404).send('Poster not found');
+    } catch(e) {
+      res.redirect(`https://image.tmdb.org/t/p/w185${imagePath}`);
     }
-  } catch (error) {
-    res.status(404).send('Poster not found');
+    return;
   }
+  
+  // 404 per tutto il resto
+  res.status(404).json({ error: 'Not found' });
 });
 
 // ============================================================
-// API: LOGIN STREMIO
+// HANDLERS SEPARATI
 // ============================================================
-app.post('/api/stremio/login', async (req, res) => {
+
+async function handleStremioLogin(req, res) {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'Email and password required' });
@@ -192,12 +209,9 @@ app.post('/api/stremio/login', async (req, res) => {
     console.error('Stremio login error:', error.message);
     res.status(401).json({ success: false, error: error.message || 'Login failed' });
   }
-});
+}
 
-// ============================================================
-// API: SALVA CONFIGURAZIONE
-// ============================================================
-app.post('/api/save-config', async (req, res) => {
+async function handleSaveConfig(req, res) {
   const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
   
   try {
@@ -214,81 +228,24 @@ app.post('/api/save-config', async (req, res) => {
     });
     
     const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const manifestUrl = `${baseUrl}/manifest.json?uuid=${finalUuid}`;
     
-    // URL per AIOMetadata (formato che preferisce)
-    const manifestUrl = `${baseUrl}/stremio/${finalUuid}/config/manifest.json`;
-    
-    console.log(`✅ Config saved for user: ${finalUuid}`);
-    console.log(`   Manifest URL: ${manifestUrl}`);
-    
+    console.log(`✅ Config saved: ${finalUuid}`);
     res.json({ success: true, manifestUrl, userUuid: finalUuid });
   } catch (error) {
     console.error('Error saving config:', error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
+}
 
 // ============================================================
-// API: RICERCA TMDB
+// AVVIO
 // ============================================================
-app.get('/api/search', async (req, res) => {
-  const { q, type, language = 'en' } = req.query;
-  if (!q || q.length < 2) return res.json([]);
-  try {
-    const results = type === 'anime'
-      ? await tmdb.searchAnime(q, language)
-      : await tmdb.searchTmdb(q, type, language);
-    res.json(results || []);
-  } catch (error) {
-    res.status(500).json([]);
-  }
-});
-
-app.get('/api/languages', (req, res) => {
-  res.json([
-    { code: 'en', name: 'English', flag: '🇬🇧' },
-    { code: 'it', name: 'Italiano', flag: '🇮🇹' },
-    { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-    { code: 'es', name: 'Español', flag: '🇪🇸' },
-    { code: 'fr', name: 'Français', flag: '🇫🇷' }
-  ]);
-});
-
-app.post('/api/invalidate/:userUuid', (req, res) => {
-  catalogHandler.invalidateCache(req.params.userUuid);
-  res.json({ ok: true });
-});
-
-app.get('/api/user-stats/:userUuid', async (req, res) => {
-  try {
-    const config = await getUserConfig(req.params.userUuid);
-    if (!config) return res.json({ success: false, error: 'User not found' });
-    res.json({
-      success: true,
-      stats: {
-        movies: config.selected_movies?.length || 0,
-        series: config.selected_series?.length || 0,
-        anime: config.selected_anime?.length || 0,
-        language: config.language || 'en'
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-app.get('/', (req, res) => {
-  res.redirect('/configure');
-});
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🦝 Raccoonmendations running on port ${PORT}`);
   console.log(`   Configure: http://localhost:${PORT}/configure`);
+  console.log(`   Manifest: http://localhost:${PORT}/manifest.json?uuid=YOUR_UUID`);
 });
 
 module.exports = app;
