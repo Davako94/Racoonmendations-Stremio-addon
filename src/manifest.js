@@ -29,7 +29,7 @@ function sampleRandom(items, count, seed) {
   return result.slice(0, Math.min(count, result.length));
 }
 
-async function getManifest(userUuid) {
+async function getManifest(userUuid, baseUrl = process.env.ADDON_BASE_URL || 'https://raccoonmendations-stremio-addon.vercel.app') {
   // ============================================================
   // 1) MANIFEST SENZA UUID → AIOMetadata richiede cataloghi validi
   // ============================================================
@@ -39,9 +39,9 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Configure your addon first at /configure",
-      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
-      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
-      resources: ["catalog"],
+      logo: `${baseUrl}/static/logo.png`,
+      background: `${baseUrl}/static/cover.png`,
+      resources: ["catalog", "meta"],
       types: ["movie", "series"],
       catalogs: [
         {
@@ -78,9 +78,9 @@ async function getManifest(userUuid) {
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
-        logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
-        background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
-        resources: ["catalog"],
+        logo: `${baseUrl}/static/logo.png`,
+        background: `${baseUrl}/static/cover.png`,
+        resources: ["catalog", "meta"],
         types: ["movie", "series"],
         catalogs: [
           {
@@ -114,9 +114,9 @@ async function getManifest(userUuid) {
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Configure your addon first at /configure",
-        logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
-        background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
-        resources: ["catalog"],
+        logo: `${baseUrl}/static/logo.png`,
+        background: `${baseUrl}/static/cover.png`,
+        resources: ["catalog", "meta"],
         types: ["movie", "series"],
         catalogs: [
           {
@@ -213,9 +213,9 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Personalized recommendations based on your Stremio library",
-      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
-      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
-      resources: ["catalog"],
+      logo: `${baseUrl}/static/logo.png`,
+      background: `${baseUrl}/static/cover.png`,
+      resources: ["catalog", "meta"],
       types: ["movie", "series"],
       catalogs,
       idPrefixes: ["tt", "tmdb:"],
@@ -232,9 +232,9 @@ async function getManifest(userUuid) {
       version: "3.2.0",
       name: "Raccoonmendations",
       description: "Error loading recommendations",
-      logo: "https://raccoonmendations-stremio-addon.vercel.app/static/logo.png",
-      background: "https://raccoonmendations-stremio-addon.vercel.app/static/cover.png",
-      resources: ["catalog"],
+      logo: `${baseUrl}/static/logo.png`,
+      background: `${baseUrl}/static/cover.png`,
+      resources: ["catalog", "meta"],
       types: ["movie", "series"],
       catalogs: [],
       idPrefixes: ["tt", "tmdb:"],

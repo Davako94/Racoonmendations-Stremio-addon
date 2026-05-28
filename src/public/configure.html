@@ -89,6 +89,7 @@
     .mu-url{background:var(--bg);border:1px solid var(--bd);border-radius:10px;
       padding:.7rem 1rem;font-family:monospace;font-size:.76rem;word-break:break-all;
       color:var(--mu);margin:.7rem 0}
+    .mu-url a{color:var(--tx);text-decoration:none;display:block;word-break:break-all}
     .cp{display:inline-flex;align-items:center;gap:.38rem;background:rgba(34,197,94,.1);
       border:1px solid rgba(34,197,94,.28);border-radius:40px;color:#86efac;
       font-family:inherit;font-size:.8rem;font-weight:600;padding:.4rem .95rem;cursor:pointer;transition:all .2s}
@@ -187,7 +188,7 @@
   <div class="res" id="result" style="display:none">
     <h3>&#x2705; Addon ready!</h3>
     <p style="color:var(--mu);font-size:.86rem">Paste this link in Stremio &rarr; Add-ons &rarr; Install from URL:</p>
-    <div class="mu-url" id="manifestUrl"></div>
+    <div class="mu-url"><a id="manifestUrl" href="#" target="_blank" rel="noreferrer noopener"></a></div>
     <button class="cp" id="cpBtn" onclick="copyLink()">&#x1F4CB; Copy link</button>
   </div>
 
@@ -199,7 +200,18 @@
   let selectedMovies=[],selectedSeries=[];
   let userUuid=null;
   let previewSearchTimeout=null;
+  const STORAGE_UUID = 'raccoon.userUuid';
+  const STORAGE_EMAIL = 'raccoon.email';
+  const STORAGE_MANIFEST = 'raccoon.manifestUrl';
   const $=id=>document.getElementById(id);
+
+  function setManifestLink(url) {
+    const anchor = $("manifestUrl");
+    anchor.textContent = url;
+    anchor.href = url;
+    anchor.target = '_blank';
+    localStorage.setItem(STORAGE_MANIFEST, url);
+  }
   
   function copyLink(){
     navigator.clipboard.writeText($("manifestUrl").innerText);
@@ -212,6 +224,30 @@
     $("seriesCount").textContent=selectedSeries.length;
     $("generateBtn").disabled=!(selectedMovies.length>=5&&selectedSeries.length>=5);
   }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const savedEmail = localStorage.getItem(STORAGE_EMAIL);
+    const savedUuid = localStorage.getItem(STORAGE_UUID);
+    const savedManifest = localStorage.getItem(STORAGE_MANIFEST);
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryUuid = urlParams.get('uuid');
+
+    if (savedEmail) {
+      $("email").value = savedEmail;
+    }
+
+    if (queryUuid) {
+      userUuid = queryUuid;
+      localStorage.setItem(STORAGE_UUID, queryUuid);
+    } else if (savedUuid) {
+      userUuid = savedUuid;
+    }
+
+    if (savedManifest) {
+      setManifestLink(savedManifest);
+      $("result").style.display = 'block';
+    }
+  });
   
   function mkCard(item,sel){
     const p=item.poster_path,t=(item.title||"Unknown").replace(/"/g,"&quot;");
@@ -393,9 +429,11 @@
           selectedAnime:[],language:"en",prefs:$("prefs").value,existingUuid:userUuid})});
       const d=await r.json();
       if(d.success){
-        $("manifestUrl").textContent=d.manifestUrl;
+        setManifestLink(d.manifestUrl);
         $("result").style.display="block";
         userUuid=d.userUuid;
+        localStorage.setItem(STORAGE_UUID, d.userUuid);
+        localStorage.setItem(STORAGE_EMAIL, $("email").value);
         $("result").scrollIntoView({behavior:"smooth"});
       }else alert("Error saving configuration");
     }catch(e){alert("Error: "+e.message);}

@@ -24,9 +24,10 @@ const app = express();
 // ============================================================
 
 app.use((req, res, next) => {
-  // Prefer echoing the request Origin to support credentialed requests from webviews/mobile apps
+  // Prefer echoing the request Origin to support credentialed requests from webviews/mobile apps.
+  // Some mobile and webview requests use Origin: null, so fall back to wildcard in that case.
   const origin = req.headers.origin;
-  if (origin) {
+  if (origin && origin !== 'null') {
     res.setHeader('Access-Control-Allow-Origin', origin);
     // Tell caches to vary responses by origin
     res.setHeader('Vary', 'Origin');
@@ -61,16 +62,23 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
+const setNoCacheHeaders = (res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+};
+
 // ============================================================
 // MANIFEST CONFIGURATION (Compatibile AIOMetadata)
 // ============================================================
 
 const handleManifest = async (req, res) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setNoCacheHeaders(res);
 
   try {
     let uuid = req.params.uuid || req.query.uuid;
+    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
 
     // ============================================================
     // 🔥 PATCH: Estrai UUID dal Referer se mancante
@@ -131,8 +139,7 @@ app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
 // ============================================================
 
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setNoCacheHeaders(res);
   try {
     const metas = await catalogHandler.getCatalog(
       req.params.type,
@@ -147,8 +154,7 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
 });
 
 const handleUuidCatalog = async (req, res) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  setNoCacheHeaders(res);
   try {
     console.log(`📺 Catalog Requested: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
     const metas = await catalogHandler.getCatalog(
