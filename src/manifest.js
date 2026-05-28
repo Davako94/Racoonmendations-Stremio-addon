@@ -10,14 +10,13 @@ async function getManifest(userUuid) {
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [],
-      idPrefixes: ["tt", "tmdb:"]
+      idPrefixes: ["tt", "tmdb"]
     };
   }
 
   try {
     const config = await getUserConfig(userUuid);
     
-    // Gestione di sicurezza se il config non esiste nel DB
     if (!config) {
       return {
         id: "raccoonmendations",
@@ -27,11 +26,10 @@ async function getManifest(userUuid) {
         resources: ["catalog"],
         types: ["movie", "series"],
         catalogs: [],
-        idPrefixes: ["tt", "tmdb:"]
+        idPrefixes: ["tt", "tmdb"]
       };
     }
 
-    // Supporta sia camelCase (usato in save-config) che snake_case per retrocompatibilità
     const selectedMovies = config.selectedMovies || config.selected_movies || [];
     const selectedSeries = config.selectedSeries || config.selected_series || [];
     
@@ -57,7 +55,7 @@ async function getManifest(userUuid) {
             extra: [{ name: "skip", isRequired: false }]
           }
         ],
-        idPrefixes: ["tt", "tmdb:"]
+        idPrefixes: ["tt", "tmdb"]
       };
     }
     
@@ -79,43 +77,43 @@ async function getManifest(userUuid) {
     
     const catalogs = [];
     
-    // Cataloghi dinamici basati sui film (IDs puliti per AIOMetadata con extra.skip)
+    // Cataloghi dinamici Film
     for (const movie of randomMovies) {
       if (movie.id && movie.title) {
         catalogs.push({
           type: "movie",
           id: `similar_${movie.id}_${userUuid}`,
           name: `🎬 Similar to ${movie.title}`,
-          extra: [{ name: "skip", isRequired: false }]
+          extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
         });
       }
     }
     
-    // Cataloghi dinamici basati sulle serie (IDs puliti per AIOMetadata con extra.skip)
+    // Cataloghi dinamici Serie
     for (const series of randomSeries) {
       if (series.id && series.title) {
         catalogs.push({
           type: "series",
           id: `similar_${series.id}_${userUuid}`,
           name: `📺 Similar to ${series.title}`,
-          extra: [{ name: "skip", isRequired: false }]
+          extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
         });
       }
     }
     
-    // Cataloghi generici di raccomandazioni
+    // Cataloghi stabili generici
     catalogs.push({
       type: "movie",
       id: `rec_${userUuid}`,
       name: "✨ You might also like",
-      extra: [{ name: "skip", isRequired: false }]
+      extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
     });
     
     catalogs.push({
       type: "series",
       id: `rec_${userUuid}`,
       name: "✨ You might also like",
-      extra: [{ name: "skip", isRequired: false }]
+      extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
     });
     
     return {
@@ -126,7 +124,7 @@ async function getManifest(userUuid) {
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: catalogs,
-      idPrefixes: ["tt", "tmdb:"]
+      idPrefixes: ["tt", "tmdb"]
     };
     
   } catch (error) {
@@ -139,7 +137,7 @@ async function getManifest(userUuid) {
       resources: ["catalog"],
       types: ["movie", "series"],
       catalogs: [],
-      idPrefixes: ["tt", "tmdb:"]
+      idPrefixes: ["tt", "tmdb"]
     };
   }
 }
