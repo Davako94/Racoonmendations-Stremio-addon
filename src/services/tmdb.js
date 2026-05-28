@@ -773,6 +773,151 @@ async function getSimilar(
 }
 
 // ============================================================
+// SEARCH
+// ============================================================
+
+async function search(
+  query,
+  type = 'multi',
+  language = 'en',
+  page = 1
+) {
+
+  const lang =
+    LANGUAGE_MAP[language] ||
+    'en-US';
+
+  try {
+
+    const res = await axios.get(
+      `${BASE}/search/${type}`,
+      {
+        params: {
+          api_key: TMDB_API_KEY,
+          query,
+          language: lang,
+          page,
+          include_adult: false
+        }
+      }
+    );
+
+    return (
+      res.data.results || []
+    ).filter(item => {
+      // Filtra solo film e serie
+      if (type === 'multi') {
+        return ['movie', 'tv'].includes(item.media_type);
+      }
+      return true;
+    }).map(item => ({
+      id: String(item.id),
+      title: item.title || item.name,
+      poster_path: item.poster_path || null,
+      backdrop_path: item.backdrop_path || null,
+      overview: item.overview || '',
+      vote_average: item.vote_average || 0,
+      vote_count: item.vote_count || 0,
+      popularity: item.popularity || 0,
+      release_date: item.release_date || item.first_air_date || '',
+      media_type: item.media_type || type
+    }));
+
+  } catch (e) {
+
+    console.error(
+      'search error:',
+      e.message
+    );
+
+    return [];
+  }
+}
+
+// ============================================================
+// GET RECOMMENDATIONS FOR PREVIEW (con score)
+// ============================================================
+
+async function getRecommendationsWithScores(
+  type,
+  rawId,
+  language = 'en'
+) {
+
+  const mediaType =
+    type === 'movie'
+      ? 'movie'
+      : 'tv';
+
+  try {
+
+    const resolvedId =
+      await resolveId(
+        rawId,
+        mediaType
+      );
+
+    if (!resolvedId) {
+      return [];
+    }
+
+    const [recs, similar] = await Promise.all([
+      getRecommendations(type, resolvedId, language),
+      getSimilar(type, resolvedId, language)
+    ]);
+
+    // Mergia e rimuovi duplicati
+    const merged = [...recs, ...similar];
+    const unique = new Map();
+
+    for (const item of merged) {
+      if (item && item.id && !unique.has(item.id)) {
+        unique.set(item.id, item);
+      }
+    }
+
+    const items = Array.from(unique.values());
+
+    // Applica scoring (formula IMDb weighted)
+    const scored = items.map(item => {
+      const R = item.vote_average || 0;
+      const v = item.vote_count || 0;
+      const m = 100;
+      const C = 6.5;
+
+      let baseScore = (v / (v + m)) * R + (m / (v + m)) * C;
+
+      if ((item.popularity || 0) > 500 && R > 7.5) {
+        baseScore += 0.5;
+      }
+
+      if (v >= 100 && R >= 7.0) {
+        baseScore += 1.0;
+      }
+
+      return {
+        ...item,
+        score: Math.min(10, Math.max(0, baseScore))
+      };
+    });
+
+    // Ordina per score
+    scored.sort((a, b) => (b.score || 0) - (a.score || 0));
+
+    return scored;
+
+  } catch (e) {
+
+    console.error(
+      'getRecommendationsWithScores error:',
+      e.message
+    );
+
+    return [];
+  }
+}
+
+// ============================================================
 // EXPORTS
 // ============================================================
 
@@ -796,5 +941,10 @@ module.exports = {
 
   LANGUAGE_MAP,
 
-  getMeta
+  getMeta,
+
+  search,
+
+  getRecommendationsWithScores
 };
+

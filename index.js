@@ -290,20 +290,46 @@ app.post('/api/save-config', async (req, res) => {
 
 app.get('/api/search', async (req, res) => {
   try {
-    const { q, type, language = 'en' } = req.query;
+    const { q, type = 'movie', language = 'en' } = req.query;
 
     if (!q || q.length < 2) {
       return res.json([]);
     }
 
-    const results = type === 'anime'
-      ? await tmdb.searchAnime(q, language)
-      : await tmdb.searchTmdb(q, type, language);
+    const results = await tmdb.search(q, type === 'series' ? 'tv' : type, language);
 
     res.json(results || []);
   } catch (err) {
     console.error('Search error:', err);
     res.json([]);
+  }
+});
+
+// ============================================================
+// RECOMMENDATIONS PREVIEW
+// ============================================================
+
+app.get('/api/recommendations/:type/:id', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const { language = 'en' } = req.query;
+
+    if (!id) {
+      return res.status(400).json({ error: 'ID required' });
+    }
+
+    const results = await tmdb.getRecommendationsWithScores(type, id, language);
+
+    res.json({
+      success: true,
+      recommendations: results.slice(0, 20)
+    });
+  } catch (err) {
+    console.error('Recommendations preview error:', err);
+    res.status(500).json({
+      success: false,
+      error: err.message
+    });
   }
 });
 

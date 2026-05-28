@@ -1,4 +1,39 @@
 const { getUserConfig } = require('./services/userStore');
+const NodeCache = require('node-cache');
+
+// Cache con TTL di 2 giorni (172800 secondi)
+const seedCache = new NodeCache({ stdTTL: 172800, checkperiod: 3600 });
+
+// ============================================================
+// ROTAZIONE SEED DETERMINISTICA (ogni 2 giorni)
+// ============================================================
+function rotateSeeds(movies, series) {
+  // Usa MD5 del timestamp di oggi per una rotazione deterministica
+  const crypto = require('crypto');
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const seed = crypto.createHash('md5').update(today).digest('hex');
+  
+  // Usa il seed per ordine deterministico
+  const seedValue = parseInt(seed.substring(0, 8), 16);
+  
+  // Shuffle deterministico basato su seedValue
+  const shuffledMovies = [...movies].sort((a, b) => {
+    const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
+    const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
+    return (hashA + seedValue) - (hashB + seedValue);
+  });
+  
+  const shuffledSeries = [...series].sort((a, b) => {
+    const hashA = parseInt(crypto.createHash('md5').update(String(a.id)).digest('hex').substring(0, 8), 16);
+    const hashB = parseInt(crypto.createHash('md5').update(String(b.id)).digest('hex').substring(0, 8), 16);
+    return (hashA + seedValue) - (hashB + seedValue);
+  });
+  
+  return {
+    movies: shuffledMovies.slice(0, 5),
+    series: shuffledSeries.slice(0, 5)
+  };
+}
 
 async function getManifest(userUuid) {
   // ============================================================
@@ -85,7 +120,7 @@ async function getManifest(userUuid) {
           {
             type: "series",
             id: `setup_${userUuid}`,
-            name: "⚙️ Configure Raccoonmendations",
+            name: "⚙️ Configure Raccoonmendazioni",
             extra: [{ name: "skip", isRequired: false }]
           }
         ],
@@ -97,10 +132,21 @@ async function getManifest(userUuid) {
     // 3) MANIFEST COMPLETO CON CATALOGHI DINAMICI
     // ============================================================
 
-    const shuffle = arr => arr.sort(() => Math.random() - 0.5);
+    // Controlla cache per i seed ruotati
+    const cacheKey = `seeds_${userUuid}`;
+    let rotatedSeeds = seedCache.get(cacheKey);
+    
+    if (!rotatedSeeds) {
+      // Genera nuovi seed ruotati e cachea per 2 giorni
+      rotatedSeeds = rotateSeeds(selectedMovies, selectedSeries);
+      seedCache.set(cacheKey, rotatedSeeds);
+      console.log(`🔄 Nuovi seed ruotati per ${userUuid}: ${rotatedSeeds.movies.length} film, ${rotatedSeeds.series.length} serie`);
+    } else {
+      console.log(`✅ Seed dalla cache per ${userUuid}`);
+    }
 
-    const randomMovies = shuffle([...selectedMovies]).slice(0, 3);
-    const randomSeries = shuffle([...selectedSeries]).slice(0, 3);
+    const randomMovies = rotatedSeeds.movies;
+    const randomSeries = rotatedSeeds.series;
 
     const catalogs = [];
 
