@@ -89,19 +89,14 @@ app.get('/stremio/:uuid/config/manifest.json', async (req, res) => {
 app.get('/meta/:type/:id.json', async (req, res) => {
   try {
     const { type, id } = req.params;
-
     const mediaType = type === 'movie' ? 'movie' : 'tv';
-
     const details = await tmdb.getMeta(mediaType, id);
 
     if (!details) {
       return res.json({ meta: null });
     }
 
-    res.json({
-      meta: details
-    });
-
+    res.json({ meta: details });
   } catch (err) {
     console.error('Meta error:', err);
     res.json({ meta: null });
@@ -111,21 +106,37 @@ app.get('/meta/:type/:id.json', async (req, res) => {
 app.get('/:uuid/meta/:type/:id.json', async (req, res) => {
   try {
     const { type, id } = req.params;
-
     const mediaType = type === 'movie' ? 'movie' : 'tv';
-
     const details = await tmdb.getMeta(mediaType, id);
 
     if (!details) {
       return res.json({ meta: null });
     }
 
-    res.json({
-      meta: details
-    });
-
+    res.json({ meta: details });
   } catch (err) {
     console.error('Meta error:', err);
+    res.json({ meta: null });
+  }
+});
+
+// ============================================================
+// META - AIOMetadata
+// ============================================================
+
+app.get('/stremio/:uuid/meta/:type/:id.json', async (req, res) => {
+  try {
+    const { type, id } = req.params;
+    const mediaType = type === 'movie' ? 'movie' : 'tv';
+    const details = await tmdb.getMeta(mediaType, id);
+
+    if (!details) {
+      return res.json({ meta: null });
+    }
+
+    res.json({ meta: details });
+  } catch (err) {
+    console.error('AIOMetadata Meta error:', err);
     res.json({ meta: null });
   }
 });
@@ -143,7 +154,6 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
     );
 
     res.json({ metas });
-
   } catch (err) {
     console.error('Catalog error:', err);
     res.json({ metas: [] });
@@ -159,9 +169,29 @@ app.get('/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
     );
 
     res.json({ metas });
-
   } catch (err) {
     console.error('Catalog error:', err);
+    res.json({ metas: [] });
+  }
+});
+
+// ============================================================
+// CATALOG - AIOMetadata
+// ============================================================
+
+app.get('/stremio/:uuid/catalog/:type/:catalogId.json', async (req, res) => {
+  try {
+    console.log(`📺 AIOMetadata Catalog: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
+    
+    const metas = await catalogHandler.getCatalog(
+      req.params.type,
+      req.params.catalogId,
+      req.params.uuid
+    );
+
+    res.json({ metas });
+  } catch (err) {
+    console.error('AIOMetadata Catalog error:', err);
     res.json({ metas: [] });
   }
 });
@@ -180,7 +210,6 @@ app.get('/configure', (req, res) => {
 
 app.get('/api/poster', async (req, res) => {
   try {
-
     const { path: imagePath, size = 'w342' } = req.query;
 
     if (!imagePath) {
@@ -202,7 +231,6 @@ app.get('/api/poster', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=604800');
 
     res.send(buffer);
-
   } catch (err) {
     console.error('Poster proxy error:', err);
     res.status(500).end();
@@ -214,9 +242,7 @@ app.get('/api/poster', async (req, res) => {
 // ============================================================
 
 app.post('/api/stremio/login', async (req, res) => {
-
   try {
-
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -233,14 +259,9 @@ app.post('/api/stremio/login', async (req, res) => {
     const activeItems = rawLibrary.filter(i => !i.removed && !i.temp);
 
     const libraryForUI = activeItems.map(item => ({
-      id: String(
-        stremioApi.extractContentId(item._id || item.id)
-      ),
+      id: String(stremioApi.extractContentId(item._id || item.id)),
       title: item.name,
-      type:
-        item.type === 'series' || item.type === 'show'
-          ? 'series'
-          : 'movie',
+      type: item.type === 'series' || item.type === 'show' ? 'series' : 'movie',
       poster_path: item.poster,
       year: item.year
     }));
@@ -249,13 +270,9 @@ app.post('/api/stremio/login', async (req, res) => {
     const seen = new Set();
 
     for (const item of libraryForUI) {
-
       if (!item.id) continue;
-
       if (seen.has(item.id)) continue;
-
       seen.add(item.id);
-
       unique.push(item);
     }
 
@@ -263,11 +280,8 @@ app.post('/api/stremio/login', async (req, res) => {
       success: true,
       library: unique
     });
-
   } catch (err) {
-
     console.error('Stremio login error:', err);
-
     res.status(401).json({
       success: false,
       error: err.message
@@ -280,9 +294,7 @@ app.post('/api/stremio/login', async (req, res) => {
 // ============================================================
 
 app.post('/api/save-config', async (req, res) => {
-
   try {
-
     const {
       stremioEmail,
       selectedMovies,
@@ -295,10 +307,7 @@ app.post('/api/save-config', async (req, res) => {
 
     const existing = await getUserConfigByEmail(stremioEmail);
 
-    const userUuid =
-      existing?.uuid ||
-      existingUuid ||
-      uuidv4();
+    const userUuid = existing?.uuid || existingUuid || uuidv4();
 
     const finalUuid = await saveUserConfig(userUuid, {
       stremioEmail: stremioEmail || 'manual@mode.com',
@@ -309,23 +318,17 @@ app.post('/api/save-config', async (req, res) => {
       prefs: prefs || ''
     });
 
-    const baseUrl =
-      process.env.ADDON_BASE_URL ||
-      `${req.protocol}://${req.get('host')}`;
+    const baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
 
-    const manifestUrl =
-      `${baseUrl}/manifest.json?uuid=${finalUuid}`;
+    const manifestUrl = `${baseUrl}/manifest.json?uuid=${finalUuid}`;
 
     res.json({
       success: true,
       manifestUrl,
       userUuid: finalUuid
     });
-
   } catch (err) {
-
     console.error('Save config error:', err);
-
     res.status(500).json({
       success: false,
       error: err.message
@@ -338,27 +341,90 @@ app.post('/api/save-config', async (req, res) => {
 // ============================================================
 
 app.get('/api/search', async (req, res) => {
-
   try {
-
     const { q, type, language = 'en' } = req.query;
 
     if (!q || q.length < 2) {
       return res.json([]);
     }
 
-    const results =
-      type === 'anime'
-        ? await tmdb.searchAnime(q, language)
-        : await tmdb.searchTmdb(q, type, language);
+    const results = type === 'anime'
+      ? await tmdb.searchAnime(q, language)
+      : await tmdb.searchTmdb(q, type, language);
 
     res.json(results || []);
-
   } catch (err) {
-
     console.error('Search error:', err);
-
     res.json([]);
+  }
+});
+
+// ============================================================
+// LANGUAGES
+// ============================================================
+
+app.get('/api/languages', (req, res) => {
+  res.json([
+    { code: 'en', name: 'English', flag: '🇬🇧' },
+    { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+    { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+    { code: 'es', name: 'Español', flag: '🇪🇸' },
+    { code: 'fr', name: 'Français', flag: '🇫🇷' }
+  ]);
+});
+
+// ============================================================
+// INVALIDATE CACHE
+// ============================================================
+
+app.post('/api/invalidate/:userUuid', (req, res) => {
+  catalogHandler.invalidateCache(req.params.userUuid);
+  res.json({ ok: true });
+});
+
+// ============================================================
+// USER STATS
+// ============================================================
+
+app.get('/api/user-stats/:userUuid', async (req, res) => {
+  try {
+    const config = await getUserConfig(req.params.userUuid);
+    if (!config) {
+      return res.json({ success: false, error: 'User not found' });
+    }
+    res.json({
+      success: true,
+      stats: {
+        movies: config.selected_movies?.length || 0,
+        series: config.selected_series?.length || 0,
+        anime: config.selected_anime?.length || 0,
+        language: config.language || 'en'
+      }
+    });
+  } catch (error) {
+    console.error('User stats error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================================
+// DEBUG SEEDS
+// ============================================================
+
+app.get('/api/debug-seeds/:userUuid', async (req, res) => {
+  try {
+    const config = await getUserConfig(req.params.userUuid);
+    res.json({
+      success: true,
+      hasConfig: !!config,
+      moviesCount: config?.selected_movies?.length || 0,
+      seriesCount: config?.selected_series?.length || 0,
+      movies: config?.selected_movies?.slice(0, 5).map(m => ({ id: m.id, title: m.title })),
+      series: config?.selected_series?.slice(0, 5).map(s => ({ id: s.id, title: s.title })),
+      language: config?.language || 'en'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -390,6 +456,8 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`🦝 Raccoonmendations running on ${PORT}`);
+  console.log(`   Configure: http://localhost:${PORT}/configure`);
+  console.log(`   Manifest: http://localhost:${PORT}/manifest.json?uuid=YOUR_UUID`);
 });
 
 module.exports = app;
