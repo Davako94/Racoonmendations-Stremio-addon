@@ -146,17 +146,10 @@ const seed = hash(`${userUUID}:${hourIndex}`);
 ## 📊 Screenshots
 
 ### Configuration Page
-![Configure Screenshot - Login]([SCREENSHOT_PATH_LOGIN])
-![Configure Screenshot - Selection]([SCREENSHOT_PATH_SELECTION])
-![Configure Screenshot - Result]([SCREENSHOT_PATH_RESULT])
+![- Login]([src\public\images\login.png])
+![- Movies]([src\public\images\movies.png])
+![- Preview]([src\public\images\preview.png])
 
-### Stremio Integration
-![Stremio - Catalogs]([SCREENSHOT_PATH_STREMIO])
-![Stremio - Similar To]([SCREENSHOT_PATH_SIMILAR])
-
-### AIOMetadata
-![AIOMetadata - Discovery]([SCREENSHOT_PATH_AIOMETADATA])
-![AIOMetadata - Hourly Rotation]([SCREENSHOT_PATH_ROTATION])
 
 ## 🛠️ Technology Stack
 
@@ -171,7 +164,7 @@ const seed = hash(`${userUUID}:${hourIndex}`);
 ## 📝 Requirements
 
 - Stremio account (for authentication)
-- TMDB API key (handled by addon)
+- TMDB API key (pre-installed)
 - 5+ favorite movies selected
 - 5+ favorite series selected
 
@@ -235,14 +228,10 @@ Returns detailed metadata
 - Wait 1 minute for server cache to clear
 
 ### Catalogs not rotating after 1 hour
-- Refresh addon: Stremio → Add-ons → [Addon name] → Refresh
-- Clear browser cache
-- Check server logs for errors
+- Refresh addon: Stremio → Add-ons → Racconmendations → isntall manifest again or can use:
+  🌐 [stremio-manager](https://stremio-manager.com/) for a fast refresh!
 
-### Searching shows no results
-- Try more specific search terms
-- Check TMDB website if title exists
-- Try without special characters
+- Clear stremio cache
 
 ## 💡 Tips & Tricks
 
