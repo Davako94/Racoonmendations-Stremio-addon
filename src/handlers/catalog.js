@@ -170,7 +170,7 @@ async function getCatalog(catalogType, catalogId, userUuid) {
       const flattened = allResults.flat();
       
       items = mergeAndScoreItems(flattened, []);
-      items = items.slice(0, 50);
+      items = items.slice(0, 20);
       console.log(`   Scoring completato. Generati ${items.length} elementi.`);
     } catch (err) {
       console.error(`   Errore nel recupero dati TMDB dalle promesse:`, err.message);
@@ -186,7 +186,7 @@ async function getCatalog(catalogType, catalogId, userUuid) {
         ...item,
         score: scoreItem(item)
       })).sort((a, b) => (b.score || 0) - (a.score || 0));
-      items = items.slice(0, 50);
+      items = items.slice(0, 20);
     } catch (err) {
       console.error(`   Errore caricamento popolari TMDB:`, err.message);
     }
