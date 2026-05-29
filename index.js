@@ -97,7 +97,7 @@ const handleManifest = async (req, res) => {
     const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
 
     // ============================================================
-    // 🔥 PATCH: Estrai UUID dal Referer se mancante
+    // 🔥 Estrai UUID dal Referer se mancante
     // ============================================================
     if (!uuid && req.headers.referer) {
       const match = req.headers.referer.match(/\/([0-9a-fA-F-]{36})(\/|$)/);
@@ -107,7 +107,18 @@ const handleManifest = async (req, res) => {
       }
     }
 
-    console.log(`📄 Manifest richiesto (uuid: ${uuid || "none"})`);
+    // ============================================================
+    // 🔐 REQUIRE UUID - Block unauthenticated manifest requests
+    // ============================================================
+    if (!uuid) {
+      console.log(`❌ Manifest richiesto senza UUID - accesso negato`);
+      return res.status(401).json({ 
+        error: 'Unauthorized',
+        message: 'UUID required. Configure addon at /configure first.'
+      });
+    }
+
+    console.log(`📄 Manifest richiesto (uuid: ${uuid})`);
 
     const manifest = await getManifest(uuid, baseUrl);
     res.json(manifest);
@@ -129,7 +140,15 @@ app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 
 const handleMeta = async (req, res) => {
   setNoCacheHeaders(res);
+  
   try {
+    // 🔐 Allow public meta requests (Stremio calls these without UUID)
+    // But you can require UUID here if desired:
+    // const uuid = req.params.uuid;
+    // if (!uuid) {
+    //   return res.status(401).json({ error: 'Unauthorized' });
+    // }
+    
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
     const details = await tmdb.getMeta(mediaType, id);

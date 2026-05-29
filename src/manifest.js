@@ -36,43 +36,9 @@ function sampleRandom(items, count, seed) {
 
 async function getManifest(userUuid, baseUrl = process.env.ADDON_BASE_URL || 'https://raccoonmendations-stremio-addon.vercel.app') {
   baseUrl = normalizeBaseUrl(baseUrl);
+  
   // ============================================================
-  // 1) MANIFEST SENZA UUID → AIOMetadata richiede cataloghi validi
-  // ============================================================
-  if (!userUuid) {
-    return {
-      id: "raccoonmendations",
-      version: "3.2.0",
-      name: "Raccoonmendations",
-      description: "Configure your addon first at /configure",
-      logo: `${baseUrl}/static/logo.png`,
-      background: `${baseUrl}/static/cover.png`,
-      resources: ["catalog", "meta"],
-      types: ["movie", "series"],
-      catalogs: [
-        {
-          type: "movie",
-          id: "setup",
-          name: "⚙️ Configure Raccoonmendations",
-          extra: [{ name: "skip", isRequired: false }]
-        },
-        {
-          type: "series",
-          id: "setup",
-          name: "⚙️ Configure Raccoonmendations",
-          extra: [{ name: "skip", isRequired: false }]
-        }
-      ],
-        idPrefixes: ["tt", "tmdb:"],
-        behaviorHints: {
-          configurable: true,
-          configurationRequired: false
-        }
-    };
-  }
-
-  // ============================================================
-  // 2) MANIFEST CON UUID → carica configurazione utente
+  // UUID is guaranteed to exist (validated at endpoint level)
   // ============================================================
   try {
     const config = await getUserConfig(userUuid);
@@ -147,7 +113,7 @@ async function getManifest(userUuid, baseUrl = process.env.ADDON_BASE_URL || 'ht
     }
 
     // ============================================================
-    // 3) MANIFEST COMPLETO CON CATALOGHI DINAMICI
+    // 2) MANIFEST COMPLETO CON CATALOGHI DINAMICI (se configurato)
     // ============================================================
 
     // Seleziona una rotazione casuale stabile per ora basata su UUID utente.
