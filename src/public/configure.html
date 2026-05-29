@@ -186,10 +186,13 @@
   </div>
 
   <div class="res" id="result" style="display:none">
-    <h3>&#x2705; Addon ready!</h3>
-    <p style="color:var(--mu);font-size:.86rem">Paste this link in Stremio &rarr; Add-ons &rarr; Install from URL:</p>
+    <h3>✅ Addon ready!</h3>
+    <p style="color:var(--mu);font-size:.86rem">📌 <strong>Your unique UUID:</strong></p>
+    <div class="mu-url" id="uuidDisplay" style="font-weight:600;color:var(--a)"></div>
+    <p style="color:var(--mu);font-size:.86rem;margin-top:1rem">🔗 <strong>Install in Stremio:</strong> Paste this link in Add-ons → Install from URL:</p>
     <div class="mu-url"><a id="manifestUrl" href="#" target="_blank" rel="noreferrer noopener"></a></div>
-    <button class="cp" id="cpBtn" onclick="copyLink()">&#x1F4CB; Copy link</button>
+    <button class="cp" id="cpBtn" onclick="copyLink()">📋 Copy link</button>
+    <p style="color:var(--mu);font-size:.76rem;margin-top:1rem">💡 <strong>AIOMetadata Compatible:</strong> Your addon supports catalog aggregators like AIOMetadata, Streamline, and others.</p>
   </div>
 
   <div class="ft">&#x1F99D; Raccoonmendations &nbsp;&middot;&nbsp; Powered by TMDB. Not affiliated with Stremio.</div>
@@ -205,18 +208,23 @@
   const STORAGE_MANIFEST = 'raccoon.manifestUrl';
   const $=id=>document.getElementById(id);
 
-  function setManifestLink(url) {
+  function setManifestLink(url, uuid) {
     const anchor = $("manifestUrl");
     anchor.textContent = url;
     anchor.href = url;
     anchor.target = '_blank';
+    if (uuid) {
+      $("uuidDisplay").textContent = uuid;
+      $("uuidDisplay").style.fontFamily = 'monospace';
+      $("uuidDisplay").style.fontSize = '.8rem';
+    }
     localStorage.setItem(STORAGE_MANIFEST, url);
   }
   
   function copyLink(){
     navigator.clipboard.writeText($("manifestUrl").innerText);
     const b=$("cpBtn");b.textContent="Copied!";
-    setTimeout(()=>{b.innerHTML="&#x1F4CB; Copy link";},2000);
+    setTimeout(()=>{b.innerHTML="📋 Copy link";},2000);
   }
   
   function upd(){
@@ -243,8 +251,8 @@
       userUuid = savedUuid;
     }
 
-    if (savedManifest) {
-      setManifestLink(savedManifest);
+    if (savedManifest && savedUuid) {
+      setManifestLink(savedManifest, savedUuid);
       $("result").style.display = 'block';
     }
   });
@@ -429,7 +437,7 @@
           selectedAnime:[],language:"en",prefs:$("prefs").value,existingUuid:userUuid})});
       const d=await r.json();
       if(d.success){
-        setManifestLink(d.manifestUrl);
+        setManifestLink(d.manifestUrl, d.userUuid);
         $("result").style.display="block";
         userUuid=d.userUuid;
         localStorage.setItem(STORAGE_UUID, d.userUuid);

@@ -90,8 +90,13 @@ const setCatalogCacheHeaders = (res) => {
 // ============================================================
 
 const handleManifest = async (req, res) => {
-  setNoCacheHeaders(res);
-
+  // ============================================================
+  // AIOMetadata Compatibility Headers
+  // ============================================================
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Vary', 'Origin, Authorization');
+  
   try {
     let uuid = req.params.uuid || req.query.uuid;
     const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
