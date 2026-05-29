@@ -1,23 +1,51 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "app.js",
+      "use": "@vercel/node"
+    }
+  ],
   "rewrites": [
     {
       "source": "/static/(.*)",
       "destination": "/src/public/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/configure",
       "destination": "/app.js"
-    }
-  ],
-  "headers": [
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/:uuid/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/stremio/:uuid/config/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/:uuid/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/stremio/:uuid/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/app.js"
+    },
     {
       "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Accept, Authorization, X-Requested-With, Range" }
-      ]
+      "destination": "/app.js"
     }
   ]
 }

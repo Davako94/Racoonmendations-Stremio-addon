@@ -117,31 +117,39 @@ const handleManifest = async (req, res) => {
       }
     }
 
-    // ============================================================
-    // 🌍 CASO A: NESSUN UUID = Public Manifest (Stile Watchly per AIOMetadata)
-    // ============================================================
+    // 🌍 CASO A: NESSUN UUID = Public Manifest (Modalità indicizzazione AIOMetadata)
     if (!uuid) {
       console.log(`📡 Public manifest requested (aggregator mode)`);
       const publicManifest = {
-        id: "community.raccoonmendations",
+        id: "com.raccoonmendations.stremio",
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Personalized recommendations powered by TMDB - Configure at /configure",
         logo: `${baseUrl}/static/logo.png`,
         background: `${baseUrl}/static/logo.png`,
         resources: [
-          { 
-            name: "meta", 
-            types: ["movie", "series"], 
-            idPrefixes: ["tt", "tmdb:"] 
-          }
+          { name: "catalog", types: ["movie", "series"], idPrefixes: [] },
+          { name: "meta", types: ["movie", "series"], idPrefixes: ["tt", "tmdb:"] }
         ],
         types: ["movie", "series"],
-        catalogs: [], // 🔥 SVUOTATO COME WATCHLY: Impedisce ad AIOMetadata di fare chiamate crawler distruttive
+        catalogs: [
+          {
+            type: "movie",
+            id: "raccoon_public_movies",
+            name: "✨ Raccoonmendations - Film Popolari",
+            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+          },
+          {
+            type: "series",
+            id: "raccoon_public_series",
+            name: "✨ Raccoonmendations - Serie Popolari",
+            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+          }
+        ],
         idPrefixes: ["tt", "tmdb:"],
         behaviorHints: {
           configurable: true,
-          configurationRequired: true // Comunica all'aggregatore che serve una configurazione prima di mostrare i cataloghi
+          configurationRequired: false
         }
       };
       return res.json(publicManifest);
