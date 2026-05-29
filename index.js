@@ -113,17 +113,45 @@ const handleManifest = async (req, res) => {
     }
 
     // ============================================================
-    // 🔐 REQUIRE UUID - Block unauthenticated manifest requests
+    // 🌍 NO UUID = Public Manifest (for aggregators like AIOMetadata)
     // ============================================================
     if (!uuid) {
-      console.log(`❌ Manifest richiesto senza UUID - accesso negato`);
-      return res.status(401).json({ 
-        error: 'Unauthorized',
-        message: 'UUID required. Configure addon at /configure first.'
+      console.log(`📡 Public manifest richiesto (aggregator)`);
+      return res.json({
+        id: "raccoonmendations",
+        version: "3.2.0",
+        name: "Raccoonmendations",
+        description: "Personalized recommendations powered by TMDB - Configure at /configure",
+        logo: `${baseUrl}/static/logo.png`,
+        background: `${baseUrl}/static/cover.png`,
+        resources: ["catalog", "meta"],
+        types: ["movie", "series"],
+        catalogs: [
+          {
+            type: "movie",
+            id: "setup",
+            name: "⚙️ Configure Raccoonmendations",
+            extra: [{ name: "skip", isRequired: false }]
+          },
+          {
+            type: "series",
+            id: "setup",
+            name: "⚙️ Configure Raccoonmendations",
+            extra: [{ name: "skip", isRequired: false }]
+          }
+        ],
+        idPrefixes: ["tt", "tmdb:"],
+        behaviorHints: {
+          configurable: true,
+          configurationRequired: false
+        }
       });
     }
 
-    console.log(`📄 Manifest richiesto (uuid: ${uuid})`);
+    // ============================================================
+    // 🔐 UUID Present = Personalized Manifest (for users)
+    // ============================================================
+    console.log(`📄 Manifest personale richiesto (uuid: ${uuid})`);
 
     const manifest = await getManifest(uuid, baseUrl);
     res.json(manifest);
@@ -144,19 +172,25 @@ app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 // ============================================================
 
 const handleMeta = async (req, res) => {
-  setNoCacheHeaders(res);
+  // Allow aggregators to fetch meta without UUID
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.setHeader('Vary', 'Origin');
   
   try {
-    // 🔐 Allow public meta requests (Stremio calls these without UUID)
-    // But you can require UUID here if desired:
-    // const uuid = req.params.uuid;
-    // if (!uuid) {
-    //   return res.status(401).json({ error: 'Unauthorized' });
-    // }
-    
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
-    const details = await tmdb.getMeta(mediaType, id);
+    
+    // Extract TMDB ID (handles "tmdb:123" or "123" or "tt1234567")
+    let tmdbId = id;
+    if (tmdbId.startsWith('tmdb:')) {
+      tmdbId = tmdbId.replace('tmdb:', '');
+    } else if (tmdbId.startsWith('tt')) {
+      // IMDb to TMDB conversion would go here if needed
+      // For now, we'll try to get it directly
+    }
+
+    const details = await tmdb.getMeta(mediaType, tmdbId);
 
     if (!details) {
       return res.json({ meta: null });
@@ -180,12 +214,13 @@ app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   setCatalogCacheHeaders(res);
   try {
+    // For public requests from aggregators, use default cache behavior
     const metas = await catalogHandler.getCatalog(
       req.params.type,
       req.params.catalogId,
-      req.query.uuid
+      req.query.uuid || 'public'  // Use 'public' as default for aggregators
     );
-    res.json({ metas });
+    res.json({ metas: metas || [] });
   } catch (err) {
     console.error('Catalog error:', err);
     res.json({ metas: [] });
@@ -201,7 +236,7 @@ const handleUuidCatalog = async (req, res) => {
       req.params.catalogId,
       req.params.uuid
     );
-    res.json({ metas });
+    res.json({ metas: metas || [] });
   } catch (err) {
     console.error('Catalog path error:', err);
     res.json({ metas: [] });
@@ -490,6 +525,22 @@ app.get('/favicon.ico', (req, res) => {
 
 app.get('/', (req, res) => {
   res.redirect('/configure');
+});
+
+// ============================================================
+// HEALTH CHECK (for debugging)
+// ============================================================
+
+app.get('/', (req, res) => {
+  const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
+  res.json({
+    status: 'ok',
+    addon: 'raccoonmendations',
+    version: '3.2.0',
+    manifest: `${baseUrl}/manifest.json`,
+    configure: `${baseUrl}/configure`,
+    message: 'Public manifest available at /manifest.json - Use your UUID for personalized content'
+  });
 });
 
 // ============================================================
