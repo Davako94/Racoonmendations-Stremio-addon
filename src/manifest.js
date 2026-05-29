@@ -252,4 +252,122 @@ async function getManifest(userUuid, baseUrl = process.env.ADDON_BASE_URL || 'ht
   }
 }
 
-module.exports = { getManifest };
+module.exports = { getManifest, getPublicManifest };
+
+// ============================================================
+// PUBLIC MANIFEST - Hourly rotating demo for aggregators
+// ============================================================
+
+async function getPublicManifest(baseUrl = process.env.ADDON_BASE_URL || 'https://raccoonmendations-stremio-addon.vercel.app') {
+  baseUrl = normalizeBaseUrl(baseUrl);
+  
+  // Demo popular titles for public access (will rotate hourly)
+  const demoMovies = [
+    { id: 550, title: "Fight Club" },
+    { id: 278, title: "The Shawshank Redemption" },
+    { id: 238, title: "The Godfather" },
+    { id: 240, title: "The Godfather Part II" },
+    { id: 424, title: "Schindler's List" },
+    { id: 129, title: "Spirited Away" },
+    { id: 680, title: "Pulp Fiction" },
+    { id: 634649, title: "Spider-Man: Across the Spider-Verse" },
+    { id: 569094, title: "Spider-Man: Beyond the Spider-Verse" },
+    { id: 315635, title: "Mad Max: Fury Road" },
+    { id: 157336, title: "Interstellar" },
+    { id: 11, title: "Star Wars" },
+    { id: 24, title: "Kill Bill: Vol. 1" },
+    { id: 343668, title: "Dune" }
+  ];
+
+  const demoSeries = [
+    { id: 1399, title: "Game of Thrones" },
+    { id: 1396, title: "Breaking Bad" },
+    { id: 1668, title: "Friends" },
+    { id: 4057, title: "The Office" },
+    { id: 37854, title: "Stranger Things" },
+    { id: 78316, title: "The Last of Us" },
+    { id: 1402, title: "The Wire" },
+    { id: 2734, title: "The Office (UK)" },
+    { id: 85271, title: "Wednesday" },
+    { id: 69050, title: "Succession" }
+  ];
+
+  // Use fixed seed for public (all users see same rotation at same time)
+  const hourSeed = Math.floor(Date.now() / 3600000);
+  
+  // Rotate to 5 movies and 5 series every hour
+  const rotatedMovies = sampleRandom(demoMovies, 5, hourSeed);
+  const rotatedSeries = sampleRandom(demoSeries, 5, hourSeed + 1);
+
+  console.log(`📡 Public manifest: ${rotatedMovies.length} demo movies, ${rotatedSeries.length} demo series`);
+
+  const catalogs = [];
+
+  // Dynamic catalogs for movies
+  for (const movie of rotatedMovies) {
+    if (movie.id && movie.title) {
+      catalogs.push({
+        type: "movie",
+        id: `similar_${movie.id}_public`,
+        name: `🎬 Similar to ${movie.title}`,
+        extra: [
+          { name: "skip", isRequired: false },
+          { name: "search", isRequired: false }
+        ]
+      });
+    }
+  }
+
+  // Dynamic catalogs for series
+  for (const series of rotatedSeries) {
+    if (series.id && series.title) {
+      catalogs.push({
+        type: "series",
+        id: `similar_${series.id}_public`,
+        name: `📺 Similar to ${series.title}`,
+        extra: [
+          { name: "skip", isRequired: false },
+          { name: "search", isRequired: false }
+        ]
+      });
+    }
+  }
+
+  // Add generic catalogs
+  catalogs.push({
+    type: "movie",
+    id: "rec_public",
+    name: "✨ Popular Movies",
+    extra: [
+      { name: "skip", isRequired: false },
+      { name: "search", isRequired: false }
+    ]
+  });
+
+  catalogs.push({
+    type: "series",
+    id: "rec_public",
+    name: "✨ Popular Series",
+    extra: [
+      { name: "skip", isRequired: false },
+      { name: "search", isRequired: false }
+    ]
+  });
+
+  return {
+    id: "raccoonmendations",
+    version: "3.2.0",
+    name: "Raccoonmendations",
+    description: "Popular recommendations powered by TMDB - Install addon to personalize",
+    logo: `${baseUrl}/static/logo.png`,
+    background: `${baseUrl}/static/logo.png`,
+    resources: ["catalog", "meta"],
+    types: ["movie", "series"],
+    catalogs: catalogs,
+    idPrefixes: ["tt", "tmdb:"],
+    behaviorHints: {
+      configurable: true,
+      configurationRequired: false
+    }
+  };
+}
