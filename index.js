@@ -356,7 +356,7 @@ app.get('/api/recommendations/:type/:id', async (req, res) => {
     if (!id) return res.status(400).json({ error: 'ID required' });
 
     const results = await tmdb.getRecommendationsWithScores(type, id, language);
-    return res.json({ success: true, recommendations: results.slice(0, 20) });
+    return res.json({ success: true, recommendations: results.slice(0, 50) });
   } catch (err) {
     console.error('Recommendations preview error:', err);
     return res.status(500).json({ success: false, error: err.message });
