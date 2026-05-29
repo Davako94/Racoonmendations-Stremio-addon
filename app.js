@@ -121,15 +121,19 @@ const handleManifest = async (req, res) => {
     if (!uuid) {
       console.log(`📡 Public manifest requested (aggregator mode)`);
       const publicManifest = {
-        id: "com.raccoonmendations.stremio",
+        id: "community.raccoonmendations",
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Personalized recommendations powered by TMDB - Configure at /configure",
         logo: `${baseUrl}/static/logo.png`,
         background: `${baseUrl}/static/logo.png`,
         resources: [
-          { name: "catalog", types: ["movie", "series"], idPrefixes: [] },
-          { name: "meta", types: ["movie", "series"], idPrefixes: ["tt", "tmdb:"] }
+          "catalog", 
+          { 
+            name: "meta", 
+            types: ["movie", "series"], 
+            idPrefixes: ["tt", "tmdb:"] 
+          }
         ],
         types: ["movie", "series"],
         catalogs: [
@@ -137,13 +141,13 @@ const handleManifest = async (req, res) => {
             type: "movie",
             id: "raccoon_public_movies",
             name: "✨ Raccoonmendations - Film Popolari",
-            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+            extra: [{ name: "skip", isRequired: false }]
           },
           {
             type: "series",
             id: "raccoon_public_series",
             name: "✨ Raccoonmendations - Serie Popolari",
-            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
+            extra: [{ name: "skip", isRequired: false }]
           }
         ],
         idPrefixes: ["tt", "tmdb:"],
