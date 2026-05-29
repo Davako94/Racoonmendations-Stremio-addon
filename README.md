@@ -21,7 +21,7 @@
 1. User visits /configure → Logs in with Stremio credentials
 2. Selects 5+ favorite movies & 5+ favorite series
 3. Addon generates unique UUID for user
-4. Manifest URL created: https://addon.vercel.app/{UUID}/manifest.json
+4. Manifest URL created: https://raccoonmendations-stremio-addon.vercel.app/{UUID}/manifest.json
 5. Install in Stremio/AIOMetadata
 6. Every hour, catalogs rotate to show different "Similar to..." recommendations
 ```
@@ -60,26 +60,22 @@
 
 ### Option 2: AIOMetadata (Public Demo)
 
-Add this URL to AIOMetadata:
+Add your URL manifest to AIOMetadata - Catalog - Custom manifest:
 ```
-https://raccoonmendations-stremio-addon.vercel.app/manifest.json
+https://raccoonmendations-stremio-addon.vercel.app/{UUID}/manifest.json
 ```
 
 **Available AIOMetadata Instances:**
-- 🌐 [AIOMetadata Official](https://www.aiometadata.com/)
-- 🌐 [AIOMetadata Community](https://aiometadata.github.io/)
-- 🌐 [Streamline (Fork)](https://streamline.vercel.app/)
-- 🌐 [Stremio Manager](https://stremio-manager.web.app/)
-
-**Includes 10 rotating demo catalogs:**
-- Similar to popular movies (changes hourly)
-- Similar to popular series (changes hourly)
-- Popular movies & series
+- 🌐 [aiometadata viren070](https://aiometadata.viren070.me/configure/)
+- 🌐 [aiometadatafortheweebs.midnightignite](https://aiometadatafortheweebs.midnightignite.me/configure/)
+- 🌐 [aiometadata elfhosted](https://aiometadata.elfhosted.com/configure/)
+- 🌐 [aiometadata fortheweak cloud](https://aiometadata.fortheweak.cloud/configure/)
+- 🌐 [aiometadata fortheweak nhyira](https://aiometadatafortheweak.nhyira.dev/configure/)
 
 ### Option 3: Other Aggregators
 
 Works with any Stremio-compatible catalog aggregator:
-- Copy this URL: `https://raccoonmendations-stremio-addon.vercel.app/manifest.json`
+- Copy this URL: `https://raccoonmendations-stremio-addon.vercel.app/{UUID}/manifest.json`
 - Add to your aggregator's addon sources
 - Public demo mode will be available
 
@@ -95,7 +91,7 @@ Works with any Stremio-compatible catalog aggregator:
 ### For AIOMetadata Users
 
 1. **Add the addon URL** to AIOMetadata catalog sources
-2. **Discover demo content** - Browse popular movies/series
+2. **import custom catalogs** - You can move the catalogs where you prefer
 3. **See hourly rotations** - New recommendations appear every hour
 4. **Install on Stremio** - Follow Stremio setup to personalize
 
