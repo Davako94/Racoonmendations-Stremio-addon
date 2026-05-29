@@ -2,37 +2,50 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.js",
+      "src": "app.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "src/public/**",
-      "use": "@vercel/static"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/configure",
-      "dest": "/src/public/configure.html"
+      "source": "/static/(.*)",
+      "destination": "/src/public/$1"
     },
     {
-      "src": "/static/(.*)",
-      "dest": "/src/public/$1"
+      "source": "/configure",
+      "destination": "/app.js"
     },
     {
-      "src": "/(.*)",
-      "dest": "/index.js"
-    }
-  ],
-  "headers": [
+      "source": "/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/:uuid/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/stremio/:uuid/config/manifest.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/:uuid/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/stremio/:uuid/catalog/:type/:catalogId.json",
+      "destination": "/app.js"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/app.js"
+    },
     {
       "source": "/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Accept, Authorization" },
-        { "key": "Access-Control-Max-Age", "value": "86400" }
-      ]
+      "destination": "/app.js"
     }
   ]
 }

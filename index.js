@@ -22,12 +22,12 @@ const app = express();
 function normalizeBaseUrl(value) {
   if (!value) {
     console.warn('⚠️  Empty baseUrl provided, using default');
-    return 'https://raccoonmendations-stremio-addon.vercel.app';
+    return 'https://racoonmendations-stremio-addon.vercel.app';
   }
   const normalized = String(value).replace(/\/+$|\/+(?=\?)/g, '');
   if (!normalized.startsWith('http')) {
     console.warn('⚠️  Invalid baseUrl format, using default:', value);
-    return 'https://raccoonmendations-stremio-addon.vercel.app';
+    return 'https://racoonmendations-stremio-addon.vercel.app';
   }
   return normalized;
 }
@@ -37,12 +37,9 @@ function normalizeBaseUrl(value) {
 // ============================================================
 
 app.use((req, res, next) => {
-  // Prefer echoing the request Origin to support credentialed requests from webviews/mobile apps.
-  // Some mobile and webview requests use Origin: null, so fall back to wildcard in that case.
   const origin = req.headers.origin;
   if (origin && origin !== 'null') {
     res.setHeader('Access-Control-Allow-Origin', origin);
-    // Tell caches to vary responses by origin
     res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
   } else {
@@ -63,30 +60,22 @@ app.use((req, res, next) => {
 });
 
 // ============================================================
-// BODY
+// BODY PARSERS
 // ============================================================
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ============================================================
-// STATIC
+// STATIC FILES
 // ============================================================
 
 app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
 // ============================================================
-// CACHE HEADERS
+// CACHE HEADERS UTILITIES
 // ============================================================
 
-const setNoCacheHeaders = (res) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
-  res.setHeader('Pragma', 'no-cache');
-  res.setHeader('Expires', '0');
-};
-
-// 1-hour cache for catalog responses (allows hourly rotation to work)
 const setCatalogCacheHeaders = (res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -94,13 +83,10 @@ const setCatalogCacheHeaders = (res) => {
 };
 
 // ============================================================
-// MANIFEST CONFIGURATION (Compatibile AIOMetadata)
+// MANIFEST ENDPOINT (Compatibile AIOMetadata e Stremio Manager)
 // ============================================================
 
 const handleManifest = async (req, res) => {
-  // ============================================================
-  // AIOMetadata Compatibility Headers
-  // ============================================================
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.setHeader('Vary', 'Origin, Authorization');
@@ -110,45 +96,54 @@ const handleManifest = async (req, res) => {
     let baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
     baseUrl = normalizeBaseUrl(baseUrl);
 
-    console.log(`📄 Manifest request - UUID: ${uuid || 'none'} | BaseURL: ${baseUrl}`);
+    // Estrazione di sicurezza dell'UUID direttamente dalla stringa dell'URL (per URL complessi o nidificati)
+    if (!uuid && req.originalUrl) {
+      const pathParts = req.originalUrl.split('/');
+      const uuidRegex = /([0-9a-fA-F-]{36})/;
+      for (const part of pathParts) {
+        const match = part.match(uuidRegex);
+        if (match) {
+          uuid = match[1];
+          break;
+        }
+      }
+    }
 
-    // ============================================================
-    // 🔥 Estrai UUID dal Referer se mancante
-    // ============================================================
+    // Fallback dell'UUID dal Referer header
     if (!uuid && req.headers.referer) {
       const match = req.headers.referer.match(/\/([0-9a-fA-F-]{36})(\/|$)/);
       if (match) {
         uuid = match[1];
-        console.log(`📌 UUID estratto dal Referer: ${uuid}`);
       }
     }
 
-    // ============================================================
-    // 🌍 NO UUID = Public Manifest (for aggregators like AIOMetadata)
-    // ============================================================
+    // 🌍 CASO A: NESSUN UUID = Public Manifest (Modalità indicizzazione AIOMetadata)
     if (!uuid) {
       console.log(`📡 Public manifest requested (aggregator mode)`);
       const publicManifest = {
-        id: "raccoonmendations",
+        id: "com.raccoonmendations.stremio",
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Personalized recommendations powered by TMDB - Configure at /configure",
         logo: `${baseUrl}/static/logo.png`,
-        background: `${baseUrl}/static/logo.png`, // Fallback to logo if cover missing
-        resources: ["catalog", "meta"],
+        background: `${baseUrl}/static/logo.png`,
+        resources: [
+          { name: "catalog", types: ["movie", "series"], idPrefixes: [] },
+          { name: "meta", types: ["movie", "series"], idPrefixes: ["tt", "tmdb:"] }
+        ],
         types: ["movie", "series"],
         catalogs: [
           {
             type: "movie",
-            id: "setup",
-            name: "⚙️ Configure Raccoonmendations",
-            extra: [{ name: "skip", isRequired: false }]
+            id: "raccoon_public_movies",
+            name: "✨ Raccoonmendations - Film Popolari",
+            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
           },
           {
             type: "series",
-            id: "setup",
-            name: "⚙️ Configure Raccoonmendations",
-            extra: [{ name: "skip", isRequired: false }]
+            id: "raccoon_public_series",
+            name: "✨ Raccoonmendations - Serie Popolari",
+            extra: [{ name: "skip", isRequired: false }, { name: "search", isRequired: false }]
           }
         ],
         idPrefixes: ["tt", "tmdb:"],
@@ -157,23 +152,17 @@ const handleManifest = async (req, res) => {
           configurationRequired: false
         }
       };
-      console.log(`✅ Public manifest ready (${Object.keys(publicManifest).length} fields)`);
       return res.json(publicManifest);
     }
 
-    // ============================================================
-    // 🔐 UUID Present = Personalized Manifest (for users)
-    // ============================================================
-    console.log(`📄 Personalized manifest requested (uuid: ${uuid})`);
-
+    // 🔐 CASO B: UUID PRESENTE = Manifest Utente Personalizzato
+    console.log(`📄 Personalized manifest requested for UUID: ${uuid}`);
     const manifest = await getManifest(uuid, baseUrl);
-    console.log(`✅ Manifest generated (${manifest.catalogs.length} catalogs)`);
-    res.json(manifest);
+    return res.json(manifest);
 
   } catch (err) {
     console.error('❌ Manifest error:', err.message);
-    console.error(err.stack);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: 'Manifest generation failed',
       details: err.message
     });
@@ -186,11 +175,10 @@ app.get('/stremio/:uuid/config/manifest.json', handleManifest);
 app.get('/stremio/:uuid/:compressedConfig/manifest.json', handleManifest);
 
 // ============================================================
-// META
+// META ENDPOINTS
 // ============================================================
 
 const handleMeta = async (req, res) => {
-  // Allow aggregators to fetch meta without UUID
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'public, max-age=86400');
   res.setHeader('Vary', 'Origin');
@@ -199,49 +187,44 @@ const handleMeta = async (req, res) => {
     const { type, id } = req.params;
     const mediaType = type === 'movie' ? 'movie' : 'tv';
     
-    // Extract TMDB ID (handles "tmdb:123" or "123" or "tt1234567")
     let tmdbId = id;
     if (tmdbId.startsWith('tmdb:')) {
       tmdbId = tmdbId.replace('tmdb:', '');
-    } else if (tmdbId.startsWith('tt')) {
-      // IMDb to TMDB conversion would go here if needed
-      // For now, we'll try to get it directly
     }
 
     const details = await tmdb.getMeta(mediaType, tmdbId);
-
     if (!details) {
       return res.json({ meta: null });
     }
-
-    res.json({ meta: details });
+    return res.json({ meta: details });
   } catch (err) {
     console.error('Meta error:', err);
-    res.json({ meta: null });
+    return res.json({ meta: null });
   }
 };
 
 app.get('/meta/:type/:id.json', handleMeta);
 app.get('/:uuid/meta/:type/:id.json', handleMeta);
 app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
+app.get('/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
+app.get('/stremio/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
 
 // ============================================================
-// CATALOG
+// CATALOG ENDPOINTS
 // ============================================================
 
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
   setCatalogCacheHeaders(res);
   try {
-    // For public requests from aggregators, use default cache behavior
     const metas = await catalogHandler.getCatalog(
       req.params.type,
       req.params.catalogId,
-      req.query.uuid || 'public'  // Use 'public' as default for aggregators
+      req.query.uuid || 'public'
     );
-    res.json({ metas: metas || [] });
+    return res.json({ metas: metas || [] });
   } catch (err) {
     console.error('Catalog error:', err);
-    res.json({ metas: [] });
+    return res.json({ metas: [] });
   }
 });
 
@@ -254,10 +237,10 @@ const handleUuidCatalog = async (req, res) => {
       req.params.catalogId,
       req.params.uuid
     );
-    res.json({ metas: metas || [] });
+    return res.json({ metas: metas || [] });
   } catch (err) {
     console.error('Catalog path error:', err);
-    res.json({ metas: [] });
+    return res.json({ metas: [] });
   }
 };
 
@@ -265,62 +248,40 @@ app.get('/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
 app.get('/stremio/:uuid/catalog/:type/:catalogId.json', handleUuidCatalog);
 app.get('/stremio/:uuid/:compressedConfig/catalog/:type/:catalogId.json', handleUuidCatalog);
 
-app.get('/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
-app.get('/stremio/:uuid/:compressedConfig/meta/:type/:id.json', handleMeta);
-
 // ============================================================
-// CONFIG PAGE
+// OTHER API ROUTES (CONFIG, LOGIN, SEARCH, ETC.)
 // ============================================================
 
 app.get('/configure', (req, res) => {
   res.sendFile(path.join(__dirname, 'src/public/configure.html'));
 });
 
-// ============================================================
-// POSTER PROXY
-// ============================================================
-
 app.get('/api/poster', async (req, res) => {
   try {
     const { path: imagePath, size = 'w342' } = req.query;
-
-    if (!imagePath) {
-      return res.status(400).json({ error: 'Missing path' });
-    }
+    if (!imagePath) return res.status(400).json({ error: 'Missing path' });
 
     const url = `https://image.tmdb.org/t/p/${size}${imagePath}`;
     const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`TMDB ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`TMDB ${response.status}`);
 
     const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=604800');
-
-    res.send(buffer);
+    return res.send(buffer);
   } catch (err) {
     console.error('Poster proxy error:', err);
-    res.status(500).end();
+    return res.status(500).end();
   }
 });
-
-// ============================================================
-// LOGIN STREMIO
-// ============================================================
 
 app.post('/api/stremio/login', async (req, res) => {
   try {
     const { email, password } = req.body;
-
     if (!email || !password) {
-      return res.status(400).json({
-        success: false,
-        error: 'Email and password required'
-      });
+      return res.status(400).json({ success: false, error: 'Email and password required' });
     }
 
     const auth = await stremioApi.stremioLogin(email, password);
@@ -337,42 +298,22 @@ app.post('/api/stremio/login', async (req, res) => {
 
     const unique = [];
     const seen = new Set();
-
     for (const item of libraryForUI) {
-      if (!item.id) continue;
-      if (seen.has(item.id)) continue;
+      if (!item.id || seen.has(item.id)) continue;
       seen.add(item.id);
       unique.push(item);
     }
 
-    res.json({
-      success: true,
-      library: unique
-    });
+    return res.json({ success: true, library: unique });
   } catch (err) {
     console.error('Stremio login error:', err);
-    res.status(401).json({
-      success: false,
-      error: err.message
-    });
+    return res.status(401).json({ success: false, error: err.message });
   }
 });
 
-// ============================================================
-// SAVE CONFIG
-// ============================================================
-
 app.post('/api/save-config', async (req, res) => {
   try {
-    const {
-      stremioEmail,
-      selectedMovies,
-      selectedSeries,
-      selectedAnime,
-      language,
-      prefs,
-      existingUuid
-    } = req.body;
+    const { stremioEmail, selectedMovies, selectedSeries, selectedAnime, language, prefs, existingUuid } = req.body;
 
     const existing = await getUserConfigByEmail(stremioEmail);
     const userUuid = existing?.uuid || existingUuid || uuidv4();
@@ -389,75 +330,41 @@ app.post('/api/save-config', async (req, res) => {
     const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
     const manifestUrl = `${baseUrl}/${finalUuid}/manifest.json`;
 
-    res.json({
-      success: true,
-      manifestUrl,
-      userUuid: finalUuid
-    });
+    return res.json({ success: true, manifestUrl, userUuid: finalUuid });
   } catch (err) {
     console.error('Save config error:', err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
-
-// ============================================================
-// SEARCH
-// ============================================================
 
 app.get('/api/search', async (req, res) => {
   try {
     const { q, type = 'movie', language = 'en' } = req.query;
-
-    if (!q || q.length < 2) {
-      return res.json([]);
-    }
-
+    if (!q || q.length < 2) return res.json([]);
     const results = await tmdb.search(q, type === 'series' ? 'tv' : type, language);
-
-    res.json(results || []);
+    return res.json(results || []);
   } catch (err) {
     console.error('Search error:', err);
-    res.json([]);
+    return res.json([]);
   }
 });
-
-// ============================================================
-// RECOMMENDATIONS PREVIEW
-// ============================================================
 
 app.get('/api/recommendations/:type/:id', async (req, res) => {
   try {
     const { type, id } = req.params;
     const { language = 'en' } = req.query;
-
-    if (!id) {
-      return res.status(400).json({ error: 'ID required' });
-    }
+    if (!id) return res.status(400).json({ error: 'ID required' });
 
     const results = await tmdb.getRecommendationsWithScores(type, id, language);
-
-    res.json({
-      success: true,
-      recommendations: results.slice(0, 20)
-    });
+    return res.json({ success: true, recommendations: results.slice(0, 20) });
   } catch (err) {
     console.error('Recommendations preview error:', err);
-    res.status(500).json({
-      success: false,
-      error: err.message
-    });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ============================================================
-// LANGUAGES
-// ============================================================
-
 app.get('/api/languages', (req, res) => {
-  res.json([
+  return res.json([
     { code: 'en', name: 'English', flag: '🇬🇧' },
     { code: 'it', name: 'Italiano', flag: '🇮🇹' },
     { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
@@ -466,115 +373,64 @@ app.get('/api/languages', (req, res) => {
   ]);
 });
 
-// ============================================================
-// INVALIDATE CACHE
-// ============================================================
-
 app.post('/api/invalidate/:userUuid', (req, res) => {
   catalogHandler.invalidateCache(req.params.userUuid);
-  res.json({ ok: true });
+  return res.json({ ok: true });
 });
-
-// ============================================================
-// USER STATS
-// ============================================================
 
 app.get('/api/user-stats/:userUuid', async (req, res) => {
   try {
     const config = await getUserConfig(req.params.userUuid);
-    if (!config) {
-      return res.json({ success: false, error: 'User not found' });
-    }
-    res.json({
+    if (!config) return res.json({ success: false, error: 'User not found' });
+    return res.json({
       success: true,
       stats: {
-        movies: config.selected_movies?.length || 0,
-        series: config.selected_series?.length || 0,
-        anime: config.selected_anime?.length || 0,
+        movies: config.selectedMovies?.length || config.selected_movies?.length || 0,
+        series: config.selectedSeries?.length || config.selected_series?.length || 0,
+        anime: config.selectedAnime?.length || config.selected_anime?.length || 0,
         language: config.language || 'en'
       }
     });
   } catch (error) {
     console.error('User stats error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
-
-// ============================================================
-// DEBUG SEEDS
-// ============================================================
 
 app.get('/api/debug-seeds/:userUuid', async (req, res) => {
   try {
     const config = await getUserConfig(req.params.userUuid);
-    res.json({
+    const mList = config?.selectedMovies || config?.selected_movies || [];
+    const sList = config?.selectedSeries || config?.selected_series || [];
+    return res.json({
       success: true,
       hasConfig: !!config,
-      moviesCount: config?.selected_movies?.length || 0,
-      seriesCount: config?.selected_series?.length || 0,
-      movies: config?.selected_movies?.slice(0, 5).map(m => ({ id: m.id, title: m.title })),
-      series: config?.selected_series?.slice(0, 5).map(s => ({ id: s.id, title: s.title })),
+      moviesCount: mList.length,
+      seriesCount: sList.length,
+      movies: mList.slice(0, 5).map(m => ({ id: m.id, title: m.title })),
+      series: sList.slice(0, 5).map(s => ({ id: s.id, title: s.title })),
       language: config?.language || 'en'
     });
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// ============================================================
-// HEALTH
-// ============================================================
-
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    version: '3.1.0',
-    timestamp: new Date().toISOString()
-  });
+  return res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
-
-// ============================================================
-// ROOT
-// ============================================================
 
 app.get('/favicon.ico', (req, res) => {
-  res.sendFile(path.join(__dirname, 'src/public/logo.png'));
+  return res.sendFile(path.join(__dirname, 'src/public/logo.png'));
 });
 
 app.get('/', (req, res) => {
-  res.redirect('/configure');
+  return res.redirect('/configure');
 });
-
-// ============================================================
-// HEALTH CHECK (for debugging)
-// ============================================================
-
-app.get('/', (req, res) => {
-  const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
-  res.json({
-    status: 'ok',
-    addon: 'raccoonmendations',
-    version: '3.2.0',
-    manifest: `${baseUrl}/manifest.json`,
-    configure: `${baseUrl}/configure`,
-    message: 'Public manifest available at /manifest.json - Use your UUID for personalized content'
-  });
-});
-
-// Simple test endpoint
-app.get('/health', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
-});
-
-// ============================================================
-// MANIFEST ROUTES
-// ============================================================
 
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
-  console.log(`🦝 Raccoonmendations running on ${PORT}`);
+  console.log(`🦝 Raccoonmendations running on port ${PORT}`);
 });
 
 module.exports = app;
