@@ -117,7 +117,9 @@ const handleManifest = async (req, res) => {
       }
     }
 
-    // 🌍 CASO A: NESSUN UUID = Public Manifest (Modalità indicizzazione AIOMetadata)
+    // ============================================================
+    // 🌍 CASO A: NESSUN UUID = Public Manifest (Stile Watchly per AIOMetadata)
+    // ============================================================
     if (!uuid) {
       console.log(`📡 Public manifest requested (aggregator mode)`);
       const publicManifest = {
@@ -128,7 +130,6 @@ const handleManifest = async (req, res) => {
         logo: `${baseUrl}/static/logo.png`,
         background: `${baseUrl}/static/logo.png`,
         resources: [
-          "catalog", 
           { 
             name: "meta", 
             types: ["movie", "series"], 
@@ -136,24 +137,11 @@ const handleManifest = async (req, res) => {
           }
         ],
         types: ["movie", "series"],
-        catalogs: [
-          {
-            type: "movie",
-            id: "raccoon_public_movies",
-            name: "✨ Raccoonmendations - Film Popolari",
-            extra: [{ name: "skip", isRequired: false }]
-          },
-          {
-            type: "series",
-            id: "raccoon_public_series",
-            name: "✨ Raccoonmendations - Serie Popolari",
-            extra: [{ name: "skip", isRequired: false }]
-          }
-        ],
+        catalogs: [], // 🔥 SVUOTATO COME WATCHLY: Impedisce ad AIOMetadata di fare chiamate crawler distruttive
         idPrefixes: ["tt", "tmdb:"],
         behaviorHints: {
           configurable: true,
-          configurationRequired: false
+          configurationRequired: true // Comunica all'aggregatore che serve una configurazione prima di mostrare i cataloghi
         }
       };
       return res.json(publicManifest);
