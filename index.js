@@ -20,8 +20,16 @@ const tmdb = require('./src/services/tmdb');
 const app = express();
 
 function normalizeBaseUrl(value) {
-  if (!value) return '';
-  return String(value).replace(/\/+$|\/+(?=\?)/g, '');
+  if (!value) {
+    console.warn('⚠️  Empty baseUrl provided, using default');
+    return 'https://raccoonmendations-stremio-addon.vercel.app';
+  }
+  const normalized = String(value).replace(/\/+$|\/+(?=\?)/g, '');
+  if (!normalized.startsWith('http')) {
+    console.warn('⚠️  Invalid baseUrl format, using default:', value);
+    return 'https://raccoonmendations-stremio-addon.vercel.app';
+  }
+  return normalized;
 }
 
 // ============================================================
@@ -99,7 +107,10 @@ const handleManifest = async (req, res) => {
   
   try {
     let uuid = req.params.uuid || req.query.uuid;
-    const baseUrl = normalizeBaseUrl(process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`);
+    let baseUrl = process.env.ADDON_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    baseUrl = normalizeBaseUrl(baseUrl);
+
+    console.log(`📄 Manifest request - UUID: ${uuid || 'none'} | BaseURL: ${baseUrl}`);
 
     // ============================================================
     // 🔥 Estrai UUID dal Referer se mancante
@@ -116,14 +127,14 @@ const handleManifest = async (req, res) => {
     // 🌍 NO UUID = Public Manifest (for aggregators like AIOMetadata)
     // ============================================================
     if (!uuid) {
-      console.log(`📡 Public manifest richiesto (aggregator)`);
-      return res.json({
+      console.log(`📡 Public manifest requested (aggregator mode)`);
+      const publicManifest = {
         id: "raccoonmendations",
         version: "3.2.0",
         name: "Raccoonmendations",
         description: "Personalized recommendations powered by TMDB - Configure at /configure",
         logo: `${baseUrl}/static/logo.png`,
-        background: `${baseUrl}/static/cover.png`,
+        background: `${baseUrl}/static/logo.png`, // Fallback to logo if cover missing
         resources: ["catalog", "meta"],
         types: ["movie", "series"],
         catalogs: [
@@ -145,20 +156,27 @@ const handleManifest = async (req, res) => {
           configurable: true,
           configurationRequired: false
         }
-      });
+      };
+      console.log(`✅ Public manifest ready (${Object.keys(publicManifest).length} fields)`);
+      return res.json(publicManifest);
     }
 
     // ============================================================
     // 🔐 UUID Present = Personalized Manifest (for users)
     // ============================================================
-    console.log(`📄 Manifest personale richiesto (uuid: ${uuid})`);
+    console.log(`📄 Personalized manifest requested (uuid: ${uuid})`);
 
     const manifest = await getManifest(uuid, baseUrl);
+    console.log(`✅ Manifest generated (${manifest.catalogs.length} catalogs)`);
     res.json(manifest);
 
   } catch (err) {
-    console.error('Manifest error:', err);
-    res.status(500).json({ error: 'Manifest error' });
+    console.error('❌ Manifest error:', err.message);
+    console.error(err.stack);
+    res.status(500).json({ 
+      error: 'Manifest generation failed',
+      details: err.message
+    });
   }
 };
 
@@ -543,8 +561,14 @@ app.get('/', (req, res) => {
   });
 });
 
+// Simple test endpoint
+app.get('/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
 // ============================================================
-// START
+// MANIFEST ROUTES
 // ============================================================
 
 const PORT = process.env.PORT || 3000;
