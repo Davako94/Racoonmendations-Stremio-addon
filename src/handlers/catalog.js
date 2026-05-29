@@ -2,7 +2,9 @@ const NodeCache = require('node-cache');
 const tmdb = require('../services/tmdb');
 const { getUserLanguage } = require('../services/userStore');
 
-const cache = new NodeCache({ stdTTL: 86400, checkperiod: 3600 });
+// Cache with 1 hour TTL for catalog refresh
+// Check every 10 minutes to clean expired entries
+const cache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
 // ============================================================
 // SCORING ALGORITHM (ispirato a Watchly)

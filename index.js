@@ -67,11 +67,22 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use('/static', express.static(path.join(__dirname, 'src/public')));
 
+// ============================================================
+// CACHE HEADERS
+// ============================================================
+
 const setNoCacheHeaders = (res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
+};
+
+// 1-hour cache for catalog responses (allows hourly rotation to work)
+const setCatalogCacheHeaders = (res) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Pragma', 'cache');
 };
 
 // ============================================================
@@ -143,7 +154,7 @@ app.get('/stremio/:uuid/meta/:type/:id.json', handleMeta);
 // ============================================================
 
 app.get('/catalog/:type/:catalogId.json', async (req, res) => {
-  setNoCacheHeaders(res);
+  setCatalogCacheHeaders(res);
   try {
     const metas = await catalogHandler.getCatalog(
       req.params.type,
@@ -158,7 +169,7 @@ app.get('/catalog/:type/:catalogId.json', async (req, res) => {
 });
 
 const handleUuidCatalog = async (req, res) => {
-  setNoCacheHeaders(res);
+  setCatalogCacheHeaders(res);
   try {
     console.log(`📺 Catalog Requested: ${req.params.type}/${req.params.catalogId} (uuid: ${req.params.uuid})`);
     const metas = await catalogHandler.getCatalog(
