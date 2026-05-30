@@ -7,7 +7,7 @@
 ## ✨ Features
 
 - 🎬 **Personalized Recommendations** - Get "Similar to [Movie/Series]" catalogs based on your favorite content
-- 🔄 **Hourly Rotation** - Catalogs automatically refresh every hour with new content from your selected titles
+- 🔄 **Random selection** - Random content from your selected titles, it change with every manifest.json you install
 - 🌍 **Multi-Platform Support** - Install on Stremio, AIOMetadata, or any Stremio-compatible platform
 - 🎯 **Smart Aggregation** - Combines TMDB recommendations with similarity scores for better results
 - ⚡ **Fast & Cacheable** - Optimized HTTP caching for instant catalog loading
@@ -26,9 +26,9 @@
 6. Every hour, catalogs rotate to show different "Similar to..." recommendations
 ```
 
-### Hourly Rotation Example
+### Random Selection
 
-**Hour 1:**
+**manifest 1:**
 - 🎬 Similar to Fight Club
 - 🎬 Similar to Godfather  
 - 🎬 Similar to Pulp Fiction
@@ -37,7 +37,7 @@
 - ✨ Popular Movies
 - ✨ Popular Series
 
-**Hour 2:** (Auto-refreshes)
+**manifest 2:** 
 - 🎬 Similar to Inception
 - 🎬 Similar to Interstellar
 - 🎬 Similar to Shawshank Redemption
@@ -92,10 +92,10 @@ Works with any Stremio-compatible catalog aggregator:
 
 1. **Add the addon URL** to AIOMetadata catalog sources
 2. **import custom catalogs** - You can move the catalogs where you prefer
-3. **See hourly rotations** - New recommendations appear every hour
+3. **See you random elements from your selection** - New recommendations appear every manifest you install
 4. **Install on Stremio** - Follow Stremio setup to personalize
 
-### Searching for Content
+### Searching for Content //next update//
 
 The configure page includes an advanced search:
 
@@ -132,16 +132,6 @@ Supabase (User Configuration Storage)
 - **Meta**: Cached for 24 hours (static content)
 - **Images**: Cached for 1 week
 
-### Hourly Seed Generation
-
-```javascript
-// Deterministic hourly rotation
-const hourIndex = Math.floor(Date.now() / 3600000);
-const seed = hash(`${userUUID}:${hourIndex}`);
-
-// Same user, same hour = same catalogs (across devices)
-// Different hour = different catalogs (auto-refresh)
-```
 
 ## 🛠️ Technology Stack
 
@@ -219,18 +209,18 @@ Returns detailed metadata
 - Refresh addon in Stremio settings
 - Wait 1 minute for server cache to clear
 
-### Catalogs not rotating after 1 hour
-- Refresh addon: Stremio → Add-ons → Racconmendations → isntall manifest again or can use:
-  🌐 [stremio-manager](https://stremio-manager.com/) for a fast refresh!
+### Catalogs not change
+- Reinstall addon: Stremio → Add-ons → Raccoonmendations → install manifest again or you can use:
+  🌐 [stremio-manager](https://stremio-manager.com/) for a fast reinstall!
 
 - Clear stremio cache
 
 ## 💡 Tips & Tricks
 
 - **Export selections** - Your UUID preserves your choices indefinitely
-- **Share addon** - Share your UUID manifest URL with others (they'll get public recommendations)
+- **Share addon** - Share your UUID manifest URL with others (they'll get your public recommendations)
 - **Update preferences** - Revisit `/configure` with same email to modify selections
-- **Test rotations** - Check if catalogs change by viewing at different times
+
 - **Bookmark URL** - Save your personal manifest URL as bookmark
 
 ## 🤝 Contributing
