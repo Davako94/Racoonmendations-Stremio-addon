@@ -143,14 +143,6 @@ const seed = hash(`${userUUID}:${hourIndex}`);
 // Different hour = different catalogs (auto-refresh)
 ```
 
-## 📊 Screenshots
-
-### Configuration Page
-![- Login]([src\public\images\login.png])
-![- Movies]([src\public\images\movies.png])
-![- Preview]([src\public\images\preview.png])
-
-
 ## 🛠️ Technology Stack
 
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript
